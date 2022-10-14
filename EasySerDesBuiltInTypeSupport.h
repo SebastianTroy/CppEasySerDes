@@ -15,10 +15,10 @@
  * This file adds support for all C++ built in types
  */
 
-namespace util {
-
 template <typename T>
-struct JsonSerialiser;
+concept IsArithmetic = std::integral<T> || std::floating_point<T>;
+
+namespace esd {
 
 ///
 /// Specialisations to support built in C++ types
@@ -27,7 +27,8 @@ struct JsonSerialiser;
 // bool, int unsigned, float, & double could all probably be covered using an is_arithmetic concept, but then the error messages would be less helpful
 
 template <>
-struct JsonSerialiser<bool> {
+class JsonSerialiser<bool> {
+public:
     static bool Validate(const nlohmann::json& serialised)
     {
         return serialised.is_boolean();
@@ -46,7 +47,8 @@ struct JsonSerialiser<bool> {
 
 // Specialise for char so that is is more user readable in JSON form
 template <>
-struct JsonSerialiser<char> {
+class JsonSerialiser<char> {
+public:
     static bool Validate(const nlohmann::json& serialised)
     {
         return serialised.is_string() && serialised.get<std::string>().size() == 1;
@@ -63,11 +65,45 @@ struct JsonSerialiser<char> {
     }
 };
 
-template <std::unsigned_integral T>
-struct JsonSerialiser<T> {
+// Specialisation for all numeric types supported by the JSON library
+template <typename T>
+requires (std::signed_integral<T> && sizeof(T) <= sizeof(nlohmann::json::number_integer_t))
+      || (std::unsigned_integral<T> && sizeof(T) <= sizeof(nlohmann::json::number_unsigned_t))
+      || (std::floating_point<T> && sizeof(T) <= sizeof(nlohmann::json::number_float_t))
+class JsonSerialiser<T> {
+public:
+    // TODO something like this would allow for the collapse the four Validate definitions into a single definition
+    // using JsonNumericType = (std::signed_integral<T> ? nlohmann::json::number_integer_t : (std::unsigned_integral<T> ? nlohmann::json::number_unsigned_t : nlohmann::json::number_t));
+    // private: static inline nlohmann::json::value_t storageType_ = ... as above ish;
+
+    template <typename S = T>
+    requires std::same_as<S, T>
+          && std::signed_integral<S>
     static bool Validate(const nlohmann::json& serialised)
     {
-        return MatchType(nlohmann::json::value_t::number_unsigned, serialised.type()) && serialised.get<uint64_t>() == Deserialise(serialised);
+        return Validate<nlohmann::json::number_integer_t>(serialised, nlohmann::json::value_t::number_integer);
+    }
+
+    template <typename S = T>
+    requires std::same_as<S, T>
+          && std::unsigned_integral<S>
+    static bool Validate(const nlohmann::json& serialised)
+    {
+        return Validate<nlohmann::json::number_unsigned_t>(serialised, nlohmann::json::value_t::number_unsigned);
+    }
+
+    template <typename S = T>
+    requires std::same_as<S, T>
+          && std::floating_point<S>
+    static bool Validate(const nlohmann::json& serialised)
+    {
+        return Validate<nlohmann::json::number_float_t>(serialised, nlohmann::json::value_t::number_float);
+    }
+
+    template <typename JsonInternalStorageType>
+    static bool Validate(const nlohmann::json& serialised, const nlohmann::json::value_t& expectedStorageType)
+    {
+        return MatchType(serialised.type(), expectedStorageType) && serialised.get<JsonInternalStorageType>() == static_cast<JsonInternalStorageType>(Deserialise(serialised));
     }
 
     static nlohmann::json Serialise(const T& value)
@@ -81,83 +117,46 @@ struct JsonSerialiser<T> {
     }
 };
 
-template <std::signed_integral T>
-struct JsonSerialiser<T> {
+// Specialisation for all numeric types that are NOT supported by the JSON library
+// FIXME only tests for "long double" as I do not have a compiler capable of larger integer types...
+template <typename T>
+requires (std::signed_integral<T> && sizeof(T) > sizeof(nlohmann::json::number_integer_t))
+      || (std::unsigned_integral<T> && sizeof(T) > sizeof(nlohmann::json::number_unsigned_t))
+      || (std::floating_point<T> && sizeof(T) > sizeof(nlohmann::json::number_float_t))
+class JsonSerialiser<T> {
+public:
     static bool Validate(const nlohmann::json& serialised)
     {
-        return MatchType(nlohmann::json::value_t::number_integer, serialised.type()) && serialised.get<int64_t>() == Deserialise(serialised);
+        return serialised.type() == nlohmann::json::value_t::string && std::regex_match(serialised.get<std::string>(), validator);
     }
 
     static nlohmann::json Serialise(const T& value)
     {
-        return value;
-    }
-
-    static T Deserialise(const nlohmann::json& serialised)
-    {
-        return serialised.get<T>();
-    }
-};
-
-template <std::floating_point T>
-struct JsonSerialiser<T> {
-    static bool Validate(const nlohmann::json& serialised)
-    {
-        return MatchType(nlohmann::json::value_t::number_float, serialised.type()) && serialised.get<long double>() == Deserialise(serialised);
-    }
-
-    static nlohmann::json Serialise(const T& value)
-    {
-        return value;
-    }
-
-    static T Deserialise(const nlohmann::json& serialised)
-    {
-        return serialised.get<T>();
-    }
-};
-
-template <>
-struct JsonSerialiser<long double> {
-    static bool Validate(const nlohmann::json& serialised)
-    {
-        // NOT SUPPORTED NATIVELY by nlohmann_json so we need to store it in string form
-        // BUT we should also support parsing smaller values that were stored as a number
-        return JsonSerialiser<double>::Validate(serialised) || (serialised.is_string() && std::regex_match(serialised.get<std::string>(), rx));
-    }
-
-    static nlohmann::json Serialise(const long double& value)
-    {
-        // Always store the value as a string for consistency. Parse and Deserialise are more lenient to accomodate hand written/modified files
         std::stringstream valueStream;
-        valueStream.precision(std::numeric_limits<long double>::digits);
+        valueStream.precision(std::numeric_limits<T>::digits);
         valueStream << value;
         return valueStream.str();
     }
 
-    static long double Deserialise(const nlohmann::json& serialised)
+    static T Deserialise(const nlohmann::json& serialised)
     {
-        // NOT SUPPORTED NATIVELY by nlohmann_json so we store the value as a string
-        if (serialised.type() == nlohmann::json::value_t::string) {
-            std::stringstream valueStream(serialised.get<std::string>());
-            valueStream.precision(std::numeric_limits<long double>::digits);
-            long double value;
-            valueStream >> value;
-            return value;
-        } else {
-            // Also support the parsing of smaller values that have been stored numerically
-            return JsonSerialiser<double>::Deserialise(serialised);
-        }
+        std::stringstream valueStream(serialised.get<std::string>());
+        valueStream.precision(std::numeric_limits<T>::digits);
+        T value;
+        valueStream >> value;
+        return value;
     }
 
 private:
-    static inline const std::regex rx{ R"(^([+-]?(?:[[:d:]]+\.?|[[:d:]]*\.[[:d:]]+))(?:[Ee][+-]?[[:d:]]+)?$)" };
+    static inline std::regex validator = CreateRegex<T>();
 };
 
 template <typename T>
 concept EnumConcept = std::is_enum_v<T>;
+
 template <EnumConcept T>
-struct JsonSerialiser<T> {
+class JsonSerialiser<T> {
+public:
     static bool Validate(const nlohmann::json& serialised)
     {
         return JsonSerialiser<std::underlying_type_t<T>>::Validate(serialised);
@@ -174,6 +173,6 @@ struct JsonSerialiser<T> {
     }
 };
 
-} // end namespace util
+} // end namespace esd
 
 #endif // EASYSERDESBUILTINTYPESUPPORT_H

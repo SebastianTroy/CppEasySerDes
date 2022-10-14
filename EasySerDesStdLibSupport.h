@@ -1,7 +1,7 @@
 #ifndef EASYSERDESSTDLIBSUPPORT_H
 #define EASYSERDESSTDLIBSUPPORT_H
 
-#include "EasySerDesCore.h"
+#include "EasySerDesClassHelper.h"
 
 #include <nlohmann/json.hpp>
 
@@ -13,12 +13,13 @@
  * This file is for implementing support for std library constructs
  */
 
-namespace util {
+namespace esd {
 
 
 // Specialise for std::byte so that is is more user readable in JSON form
 template <>
-struct JsonSerialiser<std::byte> {
+class JsonSerialiser<std::byte> {
+public:
     static bool Validate(const nlohmann::json& serialised)
     {
         return serialised.is_string() && serialised.get<std::string>().size() == 2;
@@ -45,53 +46,55 @@ struct JsonSerialiser<std::byte> {
     }
 };
 
-// TODO perhaps support Pair using the class helper (once implemented), might be less verbose
 template <typename T1, typename T2>
-struct JsonSerialiser<std::pair<T1, T2>> {
-    static bool Validate(const nlohmann::json& serialised)
+class JsonSerialiser<std::pair<T1, T2>> : public JsonClassSerialiser<std::pair<T1, T2>, T1, T2> {
+public:
+    // FIXME use "HelperType" when it supports templated types
+    static void SetupHelper(InternalHelper<std::pair<T1, T2>, T1, T2>& h)
     {
-        return serialised.is_array() && serialised.size() == 2
-                && JsonSerialiser<T1>::Validate(serialised.at(0))
-                && JsonSerialiser<T2>::Validate(serialised.at(1));
-    }
-
-    static nlohmann::json Serialise(const std::pair<T1, T2>& value)
-    {
-        nlohmann::json serialisedValues = nlohmann::json::array();
-        serialisedValues.push_back(JsonSerialiser<T1>::Serialise(value.first));
-        serialisedValues.push_back(JsonSerialiser<T2>::Serialise(value.second));
-        return serialisedValues;
-    }
-
-    static std::pair<T1, T2> Deserialise(const nlohmann::json& serialised)
-    {
-        return std::make_pair(JsonSerialiser<T1>::Deserialise(serialised.at(0)), JsonSerialiser<T2>::Deserialise(serialised.at(1)));
+        h.RegisterConstruction(h.CreateParameter(&std::pair<T1, T2>::first),
+                               h.CreateParameter(&std::pair<T1, T2>::second));
     }
 };
 
 template <typename... Ts>
-struct JsonSerialiser<std::tuple<Ts...>> {
+class JsonSerialiser<std::tuple<Ts...>> : public JsonClassSerialiser<std::tuple<Ts...>, Ts...> {
+public:
+    // FIXME use "HelperType" when it supports templated types
+    static void SetupHelper(InternalHelper<std::tuple<Ts...>, Ts...>& h)
+    {
+        SetupHelperInternal(h, std::make_index_sequence<sizeof...(Ts)>());
+    }
+
+private:
+    template <std::size_t... Indexes>
+    static void SetupHelperInternal(InternalHelper<std::tuple<Ts...>, Ts...>& h, std::index_sequence<Indexes...>)
+    {
+        // Naming them all T0 causes the helper to create unique names: T0, T1, T2...
+        // The important part is that the last character of the duplicated label is a '0'
+        h.RegisterConstruction(h.CreateParameter([](const std::tuple<Ts...>& t)
+        {
+            return std::get<Indexes>(t);
+        }, "T0") ...);
+    }
+};
+
+template <>
+class JsonSerialiser<std::string> {
+public:
     static bool Validate(const nlohmann::json& serialised)
     {
-        size_t index = 0;
-        return serialised.is_array() && serialised.size() == sizeof...(Ts)
-                && (JsonSerialiser<Ts>::Validate(serialised.at(index++)) && ...);
+        return serialised.is_string();
     }
 
-    static nlohmann::json Serialise(const std::tuple<Ts...>& value)
+    static nlohmann::json Serialise(const std::string& stringLikeValue)
     {
-        nlohmann::json serialisedValues = nlohmann::json::array();
-        std::apply([&](const auto&... tupleItems)
-        {
-            (serialisedValues.push_back(JsonSerialiser<std::remove_cvref_t<decltype(tupleItems)>>::Serialise(tupleItems)), ...);
-        }, value);
-        return serialisedValues;
+        return stringLikeValue;
     }
 
-    static std::tuple<Ts...> Deserialise(const nlohmann::json& serialised)
+    static std::string Deserialise(const nlohmann::json& serialised)
     {
-        size_t index = 0;
-        return { [&]{ return JsonSerialiser<Ts>::Deserialise(serialised.at(index++)); }()... };
+        return serialised.get<std::string>();
     }
 };
 
@@ -105,8 +108,12 @@ concept PushBackableConcept = requires (T c, typename T::value_type v) { c.push_
 template <typename T>
 concept StringLikeConcept = std::ranges::range<T> && std::same_as<typename T::value_type, char> && PushBackableConcept<T>;
 
+// TODO a concept for "Type has a JsonSerialiser that extends JsonClassSerialiser"
+// Then this can be used by shared and unique pointer, and could be used to allow for ranges that emplace_back
+
 template <StringLikeConcept T>
-struct JsonSerialiser<T> {
+class JsonSerialiser<T> {
+public:
     static bool Validate(const nlohmann::json& serialised)
     {
         return serialised.is_string();
@@ -128,13 +135,14 @@ struct JsonSerialiser<T> {
 };
 
 template <std::ranges::range T>
-struct JsonSerialiser<T> {
+class JsonSerialiser<T> {
+public:
     static bool Validate(const nlohmann::json& serialised)
     {
         return serialised.is_array() && std::ranges::all_of(serialised, [](const auto& item)
-                                                                        {
-                                                                            return JsonSerialiser<std::remove_cvref_t<typename T::value_type>>::Validate(item);
-                                                                        });
+        {
+            return JsonSerialiser<typename T::value_type>::Validate(item);
+        });
     }
 
     static nlohmann::json Serialise(const T& range)
@@ -142,7 +150,7 @@ struct JsonSerialiser<T> {
         nlohmann::json serialisedItems = nlohmann::json::array();
         std::ranges::transform(range, std::back_inserter(serialisedItems), [](const auto& item)
         {
-            return JsonSerialiser<std::remove_cvref_t<typename T::value_type>>::Serialise(item);
+            return JsonSerialiser<typename T::value_type>::Serialise(item);
         });
         return serialisedItems;
     }
@@ -152,39 +160,170 @@ struct JsonSerialiser<T> {
         T items;
         std::ranges::transform(serialised, std::inserter(items, items.end()), [](const auto& item)
         {
-            return JsonSerialiser<std::remove_cvref_t<typename T::value_type>>::Deserialise(item);
+            return esd::DeserialiseWithoutChecks<typename T::value_type>(item);
         });
         return items;
     }
 };
 
-// TODO support shared_ptr, also save the memory address and some session UID so that it can be mapped and subsequent pointers to the same address can be copied rather than re-deserialised
-// (actually maybe they should be checked for sameness first, as someone may have edited the file and genuinely want one of the previously shared values to be different...)
-// Still want to share as many as possible for memory efficiency though
-// ACTUALLY perhaps instead in the validate it should fail a shared pointer that is different to an existing deserialised version of itself, and deserialise should forego the check for speed
+template <typename T, size_t N>
+class JsonSerialiser<std::array<T, N>> {
+public:
+    static bool Validate(const nlohmann::json& serialised)
+    {
+        return serialised.is_array() && serialised.size() == N && std::ranges::all_of(serialised, [](const auto& item)
+        {
+            return esd::Validate<T>(item);
+        });
+    }
 
-// TODO too much variance in how these array like types define their size and value type (bitset doesn't have value_type etc)
-//template <typename T>
-//concept ArrayOperatableConcept = requires (T a) {
-//    { a[0] } -> std::same_as<typename T::value_type>;
-//    { a.size() } -> std::same_as<size_t>;
-//};
+    static nlohmann::json Serialise(const std::array<T, N>& range)
+    {
+        nlohmann::json serialisedItems = nlohmann::json::array();
+        std::ranges::transform(range, std::back_inserter(serialisedItems), [](const auto& item)
+        {
+            return esd::Serialise<T>(item);
+        });
+        return serialisedItems;
+    }
 
-//template <ArrayOperatableConcept T>
-//struct JsonSerialiser<T> {
-//    static bool Validate(const nlohmann::json& serialised)
-//    {
-//    }
+    static std::array<T, N> Deserialise(const nlohmann::json& serialised)
+    {
+        return CreateArray(serialised, std::make_index_sequence<N>());
+    }
 
-//    static nlohmann::json Serialise(const T& range)
-//    {
-//    }
+private:
+    template <size_t... I>
+    static std::array<T, N> CreateArray(const nlohmann::json& serialised, std::index_sequence<I...>)
+    {
+        return std::array<T, N>{ esd::DeserialiseWithoutChecks<T>(serialised.at(I)) ... };
+    }
+};
 
-//    static T Deserialise(const nlohmann::json& serialised)
-//    {
-//    }
-//};
 
-} // end namespace util
+template <typename T>
+concept TypeSupportedByEasySerDesViaClassHelper = IsSpecialisationOf<JsonSerialiser<T>, JsonClassSerialiser>;
+
+template <typename T>
+requires TypeSupportedByEasySerDes<T>
+class JsonSerialiser<std::shared_ptr<T>> {
+public:
+    static bool Validate(const nlohmann::json& serialised)
+    {
+        bool valid = true;
+        valid = valid && serialised.contains(wrappedTypeKey);
+        return JsonSerialiser<T>::Validate(serialised.at(wrappedTypeKey));
+    }
+
+    static nlohmann::json Serialise(const std::shared_ptr<T>& shared)
+    {
+        nlohmann::json serialisedPtr = nlohmann::json::object();
+        std::uintptr_t pointerValue = reinterpret_cast<std::uintptr_t>(shared.get());
+        serialisedPtr[memoryAddressKey] = pointerValue;
+        serialisedPtr[wrappedTypeKey] = JsonSerialiser<T>::Serialise(*shared);
+        return serialisedPtr;
+    }
+
+    static std::shared_ptr<T> Deserialise(const nlohmann::json& serialised)
+    {
+        if constexpr (TypeSupportedByEasySerDesViaClassHelper<T>) {
+            std::shared_ptr<T> ret = CheckCache(serialised);
+
+            if (!ret) {
+                ret = JsonSerialiser<T>::Deserialise(&std::make_shared<T, JsonSerialiser<T>::ConstructionArgsForwarder<std::make_shared, T>, serialised.at(wrappedTypeKey));
+
+            }
+
+            return ret;
+        } else if constexpr (std::is_move_constructible_v<T> || std::is_copy_constructible_v<T>) {
+            return std::make_shared<T>(esd::DeserialiseWithoutChecks<T>(serialised.at(wrappedTypeKey)));
+        }
+    }
+
+private:
+    struct PointerInfo {
+        std::map<nlohmann::json, std::weak_ptr<T>> existingPointers;
+    };
+
+    static inline std::string memoryAddressKey = "ptr";
+    static inline std::string wrappedTypeKey = "wrappedType";
+
+    static inline std::map<std::uintptr_t, PointerInfo> existingPointers{};
+    // TODO don't use this hack to register
+    static inline int cacheClearRegister = []() -> std::map<T*, PointerInfo>
+    {
+        esd::CacheManager::AddEndOfOperationCallback([]()
+        {
+            existingPointers.clear();
+        });
+        return {};
+    };
+
+    // Weed out any invalid weak ptrs
+    static void TrimCache()
+    {
+        for (PointerInfo& ptrInfo : existingPointers) {
+            std::erase_if(ptrInfo.existingPointers, [](const auto& keyValuePair)
+            {
+                return keyValuePair.second.expired();
+            });
+        }
+    }
+
+    static std::shared_ptr<T> CheckCache(const nlohmann::json& serialised)
+    {
+        std::uintptr_t pointerValue = serialised.at(memoryAddressKey).get<std::uintptr_t>();
+        if (existingPointers.contains(pointerValue)) {
+            PointerInfo& ptrInfo = existingPointers.at(pointerValue);
+            if (ptrInfo.existingPointers.contains(serialised)) {
+                std::weak_ptr<T> weakPtr = ptrInfo.existingPointers.at(serialised);
+                if (std::shared_ptr<T> ptr = weakPtr.lock(); ptr) {
+                    return ptr;
+                }
+            }
+        }
+        return nullptr;
+    }
+
+    static void AddToCache(const nlohmann::json& serialised, const std::shared_ptr<T>& ptr)
+    {
+        std::uintptr_t pointerValue = reinterpret_cast<std::uintptr_t>(ptr.get());
+        const nlohmann::json& serialisedValue = serialised.at(wrappedTypeKey);
+        existingPointers[pointerValue].existingPointers[serialisedValue] = ptr;
+    }
+};
+
+template <typename T>
+requires TypeSupportedByEasySerDes<T>
+class JsonSerialiser<std::unique_ptr<T>> {
+public:
+    static bool Validate(const nlohmann::json& serialised)
+    {
+        bool valid = true;
+        valid = valid && serialised.contains(wrappedTypeKey);
+        return JsonSerialiser<T>::Validate(serialised.at(wrappedTypeKey));
+    }
+
+    static nlohmann::json Serialise(const std::unique_ptr<T>& shared)
+    {
+        nlohmann::json serialisedPtr = nlohmann::json::object();
+        serialisedPtr[wrappedTypeKey] = JsonSerialiser<T>::Serialise(*shared);
+        return serialisedPtr;
+    }
+
+    static std::unique_ptr<T> Deserialise(const nlohmann::json& serialised)
+    {
+        if constexpr (TypeSupportedByEasySerDesViaClassHelper<T>) {
+            return JsonSerialiser<T>::Deserialise(&std::make_shared<T, JsonSerialiser<T>::ConstructionArgsForwarder<std::make_unique, T>, serialised.at(wrappedTypeKey));
+        } else if constexpr (std::is_move_constructible_v<T> || std::is_copy_constructible_v<T>) {
+            return std::make_unique<T>(JsonSerialiser<T>::Deserialise(serialised.at(wrappedTypeKey)));
+        }
+    }
+
+private:
+    static inline std::string wrappedTypeKey = "wrappedType";
+};
+
+} // end namespace esd
 
 #endif // EASYSERDESSTDLIBSUPPORT_H

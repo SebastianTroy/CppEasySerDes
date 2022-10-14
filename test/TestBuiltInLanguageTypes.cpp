@@ -69,15 +69,15 @@ namespace {
     template <typename T>
     void RunTest(T value, json::value_t desiredStorageType = json::value_t::null)
     {
-        auto serialised = util::Serialise(value);
-        T deserialised = util::DeserialiseWithoutChecks<T>(serialised);
-        auto reSerialised = util::Serialise(deserialised);
+        auto serialised = esd::Serialise<T>(value);
+        T deserialised = esd::DeserialiseWithoutChecks<T>(serialised);
+        auto reSerialised = esd::Serialise<T>(deserialised);
 
         // Check this first so that an error displays nicely comparable json structures
         REQUIRE(serialised == reSerialised);
         REQUIRE(deserialised == value);
-        REQUIRE(util::Validate<T>(serialised));
-        REQUIRE(util::Validate<T>(reSerialised));
+        REQUIRE(esd::Validate<T>(serialised));
+        REQUIRE(esd::Validate<T>(reSerialised));
 
         // null type indicates we don't care what the storage type is
         if (desiredStorageType != json::value_t::null) {

@@ -30,7 +30,7 @@
  *    item is not valid then program execution is terminated.
  */
 
-namespace util {
+namespace esd {
 
 /**
  * This library uses the type erasure pattern. Specialisations of this type are
@@ -40,7 +40,7 @@ namespace util {
  * specialisation will fail to compile.
  */
 template <typename T>
-struct JsonSerialiser;
+class JsonSerialiser;
 
 /**
  * Anything that satisfies this concept is supported by this library.
@@ -61,7 +61,7 @@ concept JsonSerialserConcept = requires (const T& t, const nlohmann::json& s) {
  * an unsupported type is used with it.
  */
 template <typename T>
-concept TypeSupportedByEasySerDes = requires { JsonSerialiser<T>{}; };
+concept TypeSupportedByEasySerDes = requires { JsonSerialiser<T>{}; } && std::same_as<T, std::remove_cvref_t<T>>;
 
 ///
 /// Forward Declare API functions
@@ -96,7 +96,8 @@ T DeserialiseWithoutChecks(const nlohmann::json& serialised);
 
 
 template <JsonSerialserConcept T>
-struct JsonSerialiser<T> {
+class JsonSerialiser<T> {
+public:
     static bool Validate(const nlohmann::json& serialised)
     {
         return T::Validate(serialised);
@@ -111,6 +112,33 @@ struct JsonSerialiser<T> {
     {
         return T::Deserialise(serialised);
     }
+};
+
+/**
+ * Some JsonSerialiser<T> types may need to track information between distinct
+ * user calls to Serialise or Deserialise (e.g. shared_ptr ideally should return
+ * the same shared_ptr for repeat calls to Deserialise of the same serialised
+ * shared_ptr).
+ *
+ * It is important to allow the user to decide when to clear these chaches, so
+ * any type wishing to cache data must register a way to clear the cache here.
+ */
+class CacheManager {
+public:
+    static void AddEndOfOperationCallback(std::function<void()>&& cacheClearingcallback)
+    {
+        cacheClearingCallbacks.push_back(std::move(cacheClearingcallback));
+    }
+
+    static void ClearCaches()
+    {
+        for (auto& callback : cacheClearingCallbacks) {
+            std::invoke(callback);
+        }
+    }
+
+private:
+    static inline std::vector<std::function<void()>> cacheClearingCallbacks{};
 };
 
 ///
@@ -145,6 +173,6 @@ T DeserialiseWithoutChecks(const nlohmann::json& serialised)
     return JsonSerialiser<T>::Deserialise(serialised);
 }
 
-} // end namespace util
+} // end namespace esd
 
 #endif // EASYSERDESCORE_H

@@ -13,11 +13,13 @@ target_sources(Tests
     main.cpp
     TestBuiltInLanguageTypes.cpp
     TestStdLibrarySupport.cpp
+    TestClassHelper.h
+    TestClassHelper.cpp
+    TestJsonHelpers.h
     TestJsonHelpers.cpp
     TestJsonPolymorphicSerialisationHelper.h
     TestJsonPolymorphicSerialisationHelper.cpp
     TestJsonSerialisationHelper.h
-    TestJsonSerialisationHelper.cpp
     TestTypeName.cpp
 )
 
