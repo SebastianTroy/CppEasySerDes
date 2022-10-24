@@ -13,41 +13,6 @@
 
 namespace esd {
 
-// FIXME remove this if it is unused
-template <typename T>
-[[ nodiscard ]] constexpr std::string_view TypeName()
-{
-    std::string_view name, prefix, suffix;
-#ifdef __clang__
-    name = __PRETTY_FUNCTION__;
-    prefix = "std::string_view esd::TypeName() [T = ";
-    suffix = "]";
-#elif defined(__GNUC__)
-    name = __PRETTY_FUNCTION__;
-    prefix = "constexpr std::string_view esd::TypeName() [with T = ";
-    suffix = "; std::string_view = std::basic_string_view<char>]";
-#elif defined(_MSC_VER)
-    name = __FUNCSIG__;
-    prefix = "class std::basic_string_view<char,struct std::char_traits<char> > __cdecl esd::TypeName<";
-    suffix = ">(void)";
-#endif
-    name.remove_prefix(prefix.size());
-    name.remove_suffix(suffix.size());
-    return name;
-}
-
-// FIXME remove this if it is unused
-template<typename Arg, typename... Args>
-std::string TypeNames(const std::string& seperator)
-{
-    std::stringstream result;
-    result << TypeName<Arg>();
-    if constexpr (sizeof...(Args) > 0) {
-        result << seperator << TypeNames<Args...>(seperator);
-    }
-    return result.str();
-}
-
 // TODO the following are not JSON helpers and ought to live in core
 // Useful to tell if typename T is an instance of a particular template, usage e.g. IsInstance<T, std::vector>
 // FIXME needs to be tidied up!
@@ -62,12 +27,12 @@ template<typename T, template <typename...> class Z>
 concept IsSpecialisationOf = is_specialization_of<T, Z>::value;
 
 // https://stackoverflow.com/questions/70130735/c-concept-to-check-for-derived-from-template-specialization
-template <template <class...> class Template, class... Args>
-void derived_from_specialization_impl(const Template<Args...>&);
+template <template <class...> class Z, class... Args>
+void is_derived_from_specialization_of(const Z<Args...>&);
 
-template <class T, template <class...> class Template>
-concept derived_from_specialization_of = requires(const T& t) {
-    derived_from_specialization_impl<Template>(t);
+template <class T, template <class...> class Z>
+concept IsDerivedFromSpecialisationOf = requires(const T& t) {
+    is_derived_from_specialization_of<Z>(t);
 };
 
 template <typename T, typename BoxType>

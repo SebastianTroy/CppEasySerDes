@@ -25,9 +25,13 @@ void RunTest(T value, json::value_t desiredStorageType = json::value_t::null)
 
         // Check this first so that an error displays nicely comparable json structures
         if constexpr (!esd::is_specialization_of<T, std::shared_ptr>::value) {
-            // Don't check for shared_ptr because it stores meta data for ptr sharedness
+            // Serialiser for shared_ptr stores meta data for ptr sharedness which will not be the same between serialisations
             REQUIRE(serialised == reSerialised);
+        } else {
+            // The part that should be the same though is contained within a sub-object
+            REQUIRE(serialised.at("wrappedType") == reSerialised.at("wrappedType"));
         }
+        // If a pointer type, we want to compare the values, not the pointer itself
         if constexpr (esd::is_specialization_of<T, std::shared_ptr>::value || esd::is_specialization_of<T, std::unique_ptr>::value) {
             REQUIRE(*deserialised == *value);
         } else {
@@ -134,6 +138,8 @@ TEST_CASE("StdLibTypes", "[json]")
         {
             auto sharedPtr1 = std::make_shared<int>(42);
             auto sharedPtr2 = sharedPtr1;
+
+            REQUIRE(reinterpret_cast<uintptr_t>(sharedPtr1.get()) == reinterpret_cast<uintptr_t>(sharedPtr2.get()));
 
             auto serialised1 = esd::Serialise(sharedPtr1);
             auto serialised2 = esd::Serialise(sharedPtr2);

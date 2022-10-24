@@ -15,7 +15,6 @@
 
 namespace esd {
 
-
 // Specialise for std::byte so that is is more user readable in JSON form
 template <>
 class JsonSerialiser<std::byte> {
@@ -70,12 +69,10 @@ private:
     template <std::size_t... Indexes>
     static void SetupHelperInternal(InternalHelper<std::tuple<Ts...>, Ts...>& h, std::index_sequence<Indexes...>)
     {
-        // Naming them all T0 causes the helper to create unique names: T0, T1, T2...
-        // The important part is that the last character of the duplicated label is a '0'
         h.RegisterConstruction(h.CreateParameter([](const std::tuple<Ts...>& t)
         {
             return std::get<Indexes>(t);
-        }, "T0") ...);
+        }, "T" + std::to_string(Indexes)) ...);
     }
 };
 
@@ -200,9 +197,8 @@ private:
     }
 };
 
-
 template <typename T>
-concept TypeSupportedByEasySerDesViaClassHelper = IsSpecialisationOf<JsonSerialiser<T>, JsonClassSerialiser>;
+concept TypeSupportedByEasySerDesViaClassHelper = IsDerivedFromSpecialisationOf<JsonSerialiser<T>, JsonClassSerialiser>;
 
 template <typename T>
 requires TypeSupportedByEasySerDes<T>
@@ -219,64 +215,56 @@ public:
     {
         nlohmann::json serialisedPtr = nlohmann::json::object();
         std::uintptr_t pointerValue = reinterpret_cast<std::uintptr_t>(shared.get());
-        serialisedPtr[memoryAddressKey] = pointerValue;
+        serialisedPtr[uniqueIdentifierKey] = pointerValue;
         serialisedPtr[wrappedTypeKey] = JsonSerialiser<T>::Serialise(*shared);
         return serialisedPtr;
     }
 
     static std::shared_ptr<T> Deserialise(const nlohmann::json& serialised)
     {
-        if constexpr (TypeSupportedByEasySerDesViaClassHelper<T>) {
-            std::shared_ptr<T> ret = CheckCache(serialised);
-
-            if (!ret) {
-                ret = JsonSerialiser<T>::Deserialise(&std::make_shared<T, JsonSerialiser<T>::ConstructionArgsForwarder<std::make_shared, T>, serialised.at(wrappedTypeKey));
-
+        std::shared_ptr<T> ret = CheckCache(serialised);
+        if (!ret) {
+            if constexpr (TypeSupportedByEasySerDesViaClassHelper<T>) {
+                // Can't just pass a pointer to the std library function
+                auto makeSharedPtr = &esd::JsonSerialiser<T>::template ConstructionArgsForwarder<MakeSharedWrapper>::Invoke;
+                ret = JsonSerialiser<T>::Deserialise(makeSharedPtr, serialised.at(wrappedTypeKey));
+            } else if constexpr (std::is_move_constructible_v<T> || std::is_copy_constructible_v<T>) {
+                ret = std::make_shared<T>(esd::DeserialiseWithoutChecks<T>(serialised.at(wrappedTypeKey)));
+            } else {
+                // FIXME this ought to be a static_assert or a requirement at the top level of this template specialisation
             }
-
-            return ret;
-        } else if constexpr (std::is_move_constructible_v<T> || std::is_copy_constructible_v<T>) {
-            return std::make_shared<T>(esd::DeserialiseWithoutChecks<T>(serialised.at(wrappedTypeKey)));
+            AddToCache(serialised, ret);
         }
+        return ret;
     }
 
 private:
-    struct PointerInfo {
-        std::map<nlohmann::json, std::weak_ptr<T>> existingPointers;
+    template <typename... ConstructionArgs>
+    struct MakeSharedWrapper {
+        static std::shared_ptr<T> Invoke(ConstructionArgs... args)
+        {
+            return std::make_shared<T>(std::forward<ConstructionArgs>(args)...);
+        }
     };
 
-    static inline std::string memoryAddressKey = "ptr";
+    struct PointerInfo {
+        // Stored values may have been modified offline, so cache a different pointer for
+        std::map<std::string, std::weak_ptr<T>> variations;
+    };
+
+    static inline std::string uniqueIdentifierKey = "ptr";
     static inline std::string wrappedTypeKey = "wrappedType";
 
-    static inline std::map<std::uintptr_t, PointerInfo> existingPointers{};
-    // TODO don't use this hack to register
-    static inline int cacheClearRegister = []() -> std::map<T*, PointerInfo>
-    {
-        esd::CacheManager::AddEndOfOperationCallback([]()
-        {
-            existingPointers.clear();
-        });
-        return {};
-    };
-
-    // Weed out any invalid weak ptrs
-    static void TrimCache()
-    {
-        for (PointerInfo& ptrInfo : existingPointers) {
-            std::erase_if(ptrInfo.existingPointers, [](const auto& keyValuePair)
-            {
-                return keyValuePair.second.expired();
-            });
-        }
-    }
+    static inline std::map<std::uintptr_t, PointerInfo> cachedPointers_{};
 
     static std::shared_ptr<T> CheckCache(const nlohmann::json& serialised)
     {
-        std::uintptr_t pointerValue = serialised.at(memoryAddressKey).get<std::uintptr_t>();
-        if (existingPointers.contains(pointerValue)) {
-            PointerInfo& ptrInfo = existingPointers.at(pointerValue);
-            if (ptrInfo.existingPointers.contains(serialised)) {
-                std::weak_ptr<T> weakPtr = ptrInfo.existingPointers.at(serialised);
+        std::uintptr_t pointerValue = serialised.at(uniqueIdentifierKey).get<std::uintptr_t>();
+        if (cachedPointers_.contains(pointerValue)) {
+            PointerInfo& ptrInfo = cachedPointers_.at(pointerValue);
+            std::string key = serialised.at(wrappedTypeKey).dump();
+            if (ptrInfo.variations.contains(key)) {
+                std::weak_ptr<T> weakPtr = ptrInfo.variations.at(key);
                 if (std::shared_ptr<T> ptr = weakPtr.lock(); ptr) {
                     return ptr;
                 }
@@ -287,9 +275,19 @@ private:
 
     static void AddToCache(const nlohmann::json& serialised, const std::shared_ptr<T>& ptr)
     {
-        std::uintptr_t pointerValue = reinterpret_cast<std::uintptr_t>(ptr.get());
+        // TODO perhaps there is a nicer way to do this?
+        static bool cacheClearCallbackRegistered = false;
+        if (!cacheClearCallbackRegistered) {
+            esd::CacheManager::AddEndOfOperationCallback([]()
+            {
+                cachedPointers_.clear();
+            });
+            cacheClearCallbackRegistered = true;
+        }
+
+        std::uintptr_t pointerValue = serialised.at(uniqueIdentifierKey).get<std::uintptr_t>();
         const nlohmann::json& serialisedValue = serialised.at(wrappedTypeKey);
-        existingPointers[pointerValue].existingPointers[serialisedValue] = ptr;
+        cachedPointers_[pointerValue].variations[serialisedValue.dump()] = ptr;
     }
 };
 
@@ -314,13 +312,23 @@ public:
     static std::unique_ptr<T> Deserialise(const nlohmann::json& serialised)
     {
         if constexpr (TypeSupportedByEasySerDesViaClassHelper<T>) {
-            return JsonSerialiser<T>::Deserialise(&std::make_shared<T, JsonSerialiser<T>::ConstructionArgsForwarder<std::make_unique, T>, serialised.at(wrappedTypeKey));
+            // Can't just pass a pointer to the std library function
+            auto makeUniquePtr = &JsonSerialiser<T>::template ConstructionArgsForwarder<MakeUniqueWrapper>::Invoke;
+            return JsonSerialiser<T>::Deserialise(makeUniquePtr, serialised.at(wrappedTypeKey));
         } else if constexpr (std::is_move_constructible_v<T> || std::is_copy_constructible_v<T>) {
-            return std::make_unique<T>(JsonSerialiser<T>::Deserialise(serialised.at(wrappedTypeKey)));
+            return std::make_unique<T>(esd::DeserialiseWithoutChecks<T>(serialised.at(wrappedTypeKey)));
         }
     }
 
 private:
+    template <typename... ConstructionArgs>
+    struct MakeUniqueWrapper {
+        static std::unique_ptr<T> Invoke(ConstructionArgs... args)
+        {
+            return std::make_unique<T>(std::forward<ConstructionArgs>(args)...);
+        }
+    };
+
     static inline std::string wrappedTypeKey = "wrappedType";
 };
 

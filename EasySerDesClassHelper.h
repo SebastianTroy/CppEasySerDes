@@ -71,13 +71,13 @@ public:
     // is making the signature more verbose less readable than having a template with constraints?!
     // should I be avoiding templates if I don't need them?
     template <typename Invocable>
-    [[nodiscard]] ReturnTypeNoCVRef<Invocable, ConstructionArgs...> Deserialise(Invocable factory, const nlohmann::json& toDeserialise)
+    [[nodiscard]] static ReturnTypeNoCVRef<Invocable, ConstructionArgs...> Deserialise(Invocable factory, const nlohmann::json& toDeserialise)
     {
         return helper_.Deserialise(std::forward<Invocable>(factory), toDeserialise);
     }
 
     template <typename Invocable>
-    [[nodiscard]] ReturnTypeNoCVRef<Invocable, ConstructionArgs...> Deserialise(Invocable factory, const std::function<T* (ReturnTypeNoCVRef<Invocable, ConstructionArgs...>&)>& accessResultFromFactoryOutput, const nlohmann::json& toDeserialise)
+    [[nodiscard]] static ReturnTypeNoCVRef<Invocable, ConstructionArgs...> Deserialise(Invocable factory, const std::function<T* (ReturnTypeNoCVRef<Invocable, ConstructionArgs...>&)>& accessResultFromFactoryOutput, const nlohmann::json& toDeserialise)
     {
         return helper_.Deserialise(std::forward<Invocable>(factory), accessResultFromFactoryOutput, toDeserialise);
     }
@@ -170,10 +170,17 @@ public:
     requires std::is_invocable_v<Factory, ConstructionArgs...>
     [[nodiscard]]  ReturnTypeNoCVRef<Factory, ConstructionArgs...> Deserialise(Factory factory, const std::function<T* (ReturnTypeNoCVRef<Factory, ConstructionArgs...>&)>& accessResultFromFactoryOutput, const nlohmann::json& toDeserialise)
     {
+        return Deserialise(std::forward<Factory>(factory), accessResultFromFactoryOutput, toDeserialise, std::index_sequence_for<ConstructionArgs...>());
+    }
+
+    template <typename Factory, size_t... Indexes>
+    requires std::is_invocable_v<Factory, ConstructionArgs...>
+          && (sizeof...(ConstructionArgs) == sizeof...(Indexes))
+    [[nodiscard]]  ReturnTypeNoCVRef<Factory, ConstructionArgs...> Deserialise(Factory factory, const std::function<T* (ReturnTypeNoCVRef<Factory, ConstructionArgs...>&)>& accessResultFromFactoryOutput, const nlohmann::json& toDeserialise, std::index_sequence<Indexes...>)
+    {
         using ReturnType = ReturnTypeNoCVRef<Factory, ConstructionArgs...>;
 
-        size_t index = 0;
-        ReturnType retVal =  std::invoke(factory, esd::DeserialiseWithoutChecks<ConstructionArgs>(toDeserialise.at(constructionVariables_.at(index++)))...);
+        ReturnType retVal =  std::invoke(factory, esd::DeserialiseWithoutChecks<ConstructionArgs>(toDeserialise.at(constructionVariables_.at(Indexes)))...);
         T* deserialised = std::invoke(accessResultFromFactoryOutput, retVal);
         for (auto& initialiser : initialisationCalls_) {
             std::invoke(initialiser, toDeserialise, *deserialised);
@@ -548,13 +555,13 @@ public:
 
         RegisterVariableInternal<Getter, Setter, ParamType>(std::move(getter), [=](const nlohmann::json& source, T& target)
         {
-        std::invoke(setter, target, esd::DeserialiseWithoutChecks<ParamType>(source));
-    }, std::move(label), std::move(customValidator));
+            std::invoke(setter, target, esd::DeserialiseWithoutChecks<ParamType>(source));
+        }, std::move(label), std::move(customValidator));
     }
 
     ///
     /// DefinePostSerialiseAction
-    /// ----------------
+    /// -------------------------
     ///
 
     void DefinePostSerialiseAction(std::function<void (const T&, nlohmann::json&)>&& action)
@@ -564,57 +571,13 @@ public:
 
     ///
     /// DefinePostDeserialiseAction
-    /// ----------------
+    /// ---------------------------
     ///
 
     void DefinePostDeserialiseAction(std::function<void (const nlohmann::json&, T&)>&& action)
     {
         postDeserialisationAction_ = std::move(action);
     }
-
-    // FLASH OF BRILLIANCE ... maybe? might have been the fog hiding the issues
-    // might make registering default constructible types better and solve our shared_ptr factory conundrum
-    // removes nice naming of member types though...
-    /*
-    template <typename T, typename... Args>
-    {
-        use { esd::Deserialise<Args>(json.at(index++)), ... } to initialise
-        use auto [  ] or tuple to somehow get members and serialise (might need to specialise template funct)
-
-        // then we can support shared_ptr amongst other things
-        template <typename ReturnType, typename FactoryFunction>
-        requires SomeCleverChecksToMakeSureAllIsWell
-        ReturnType ConstructInPlace(FactoryFunction& constructor)
-        {
-            return constructor(esd::Deserialise<Args>(json.at(index++)), ...);
-        }
-    };
-     */
-
-
-    /// This factory bit here, needs to be more accesible for types such as shared pointer, that need to take the constituents of some other type and emplace them into its own factory function...
-    ///
-    /// this leads me to think there's a more generic way to support all types perhaps?
-    ///
-    /// after all an int can be brace initialised from an int and they may be a shared_ptr<int> that needs to be factory made, so plausibly any type
-    /// built in or user may need some way of taking the construction parameters and applying them to something else (also emplacing into containers may be required for certain types)
-    ///
-    /// Currently anything can only access a completely deserialised type, perhaps the generic base impl needs an understanding of the types required to construct it
-    ///
-    /// So perhaps a map of all supported types is the way to go, built-in or else, the mapped type would be able to accept some "thing" i.e. {}, T, factFunc, and produce the desired type
-    ///
-    ///
-    /// template <typename T, ConstructionTypeEnum E, typename... ConstructorSignature>
-    /// class typeHelper {
-    /// public:
-    ///     using ConstructorSignatureArgs = ConstructorSignature...;
-    ///
-    ///     template <typename ReturnType, typename Callable>
-    ///     ReturnType Emplace(Callable& c, json j)
-    ///     {
-    ///         c(Deserialise<ConstructorSignature>(j needs to be split up somehow),...);
-    ///     }
-    /// };
 
 private:
     std::vector<std::string> constructionVariables_;
