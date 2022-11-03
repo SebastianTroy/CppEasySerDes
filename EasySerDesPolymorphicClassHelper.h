@@ -28,10 +28,17 @@ namespace {
         name.remove_suffix(suffix.size());
         return name;
     }
+
+    // https://stackoverflow.com/questions/70130735/c-concept-to-check-for-derived-from-template-specialization
+    template <template <class...> class Z, class... Args>
+    void is_derived_from_specialization_of(const Z<Args...>&);
+
 } // end anon namespace
 
-
-// TODO polymorphic impl details shoudln't leak out of this header, perhaps specialise the JsonSerialiser<unique/shared_ptr<T>> here and call the Polymorphic versions of the function calls?
+template <class T, template <class...> class Z>
+concept IsDerivedFromSpecialisationOf = requires(const T& t) {
+    is_derived_from_specialization_of<Z>(t);
+};
 
 template <typename T, typename... ConstructionArgs>
 class JsonPolymorphicClassSerialiser : public JsonClassSerialiser<T, ConstructionArgs...> {

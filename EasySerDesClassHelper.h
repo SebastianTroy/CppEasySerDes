@@ -11,15 +11,33 @@
 
 namespace esd {
 
-/**
- * This rename is to help make function signatures easier to read
- */
-template <typename F, typename... Args>
-using ReturnTypeNoCVRef = std::remove_cvref_t<std::invoke_result_t<F, Args...>>;
+// A place to hide some internal helpers that would pollute and confuce the esd namespace
+namespace {
+
+    /**
+     * This concept is used in cases where a factory produces e.g. a shared
+     * pointer and we then dereference the output to complete deserialisation.
+     */
+    template <typename T, typename BoxType>
+    concept TypeIsDereferencableFrom = requires (BoxType b)
+    {
+        { *b } -> std::same_as<T&>;
+    };
+
+    /**
+     * This rename is to help make function signatures easier to read
+     */
+    template <typename F, typename... Args>
+    using ReturnTypeNoCVRef = std::remove_cvref_t<std::invoke_result_t<F, Args...>>;
+
+} // end anon namespace
 
 /**
  * Forward declaration of helper type, because it was desirable to define
  * JsonClassSerialiser first.
+ *
+ * FIXME make sure an internal helper is actually necessary! Calls could all
+ * just be static
  */
 template <typename T, typename... ConstructionArgs>
 requires std::is_class_v<T>
@@ -67,9 +85,6 @@ public:
         return helper_.Deserialise(serialised);
     }
 
-    // TODO work out if it is better to use std::function than a templated Invocable type with constraints, (and if so, better to take std::function const ref or rvalue?)
-    // is making the signature more verbose less readable than having a template with constraints?!
-    // should I be avoiding templates if I don't need them?
     template <typename Invocable>
     [[nodiscard]] static ReturnTypeNoCVRef<Invocable, ConstructionArgs...> Deserialise(Invocable factory, const nlohmann::json& toDeserialise)
     {
@@ -218,9 +233,7 @@ public:
                     if (!variables_.at(key).validator_(jsonValue)) {
                         valid = false;
                     }
-                } /* TODO not yet sure how polymorphic types are going to be supported! else if (key != "__typename") { // exception for __typename which is used for polymorphic types
-                    valid = false;
-                }*/
+                }
             }
         }
         if (valid) {
@@ -403,9 +416,9 @@ public:
     requires std::is_member_function_pointer_v<MemberFunctionPointer>
           && std::is_invocable_v<MemberFunctionPointer, T&, Ts...>
           && std::is_invocable_r_v<bool, Validator, const Ts&...>
-    void RegisterInitialisation(Validator&& parameterValidator, MemberFunctionPointer initialisationCall, Parameter<Ts>... params)
+    void RegisterInitialisation(Validator parameterValidator, MemberFunctionPointer initialisationCall, Parameter<Ts>... params)
     {
-        interdependantVariablesValidators_.push_back([=, validator = std::move(parameterValidator)](const nlohmann::json& serialised) -> bool
+        interdependantVariablesValidators_.push_back([=, validator = std::forward<Validator>(parameterValidator)](const nlohmann::json& serialised) -> bool
         {
             return std::invoke(validator, (esd::DeserialiseWithoutChecks<Ts>(serialised.at(params.parameterKey_)))...);
         });

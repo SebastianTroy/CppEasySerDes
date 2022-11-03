@@ -106,9 +106,6 @@ concept PushBackableConcept = requires (T c, typename T::value_type v) { c.push_
 template <typename T>
 concept StringLikeConcept = std::ranges::range<T> && std::same_as<typename T::value_type, char> && PushBackableConcept<T>;
 
-// TODO a concept for "Type has a JsonSerialiser that extends JsonClassSerialiser"
-// Then this can be used by shared and unique pointer, and could be used to allow for ranges that emplace_back
-
 template <StringLikeConcept T>
 class JsonSerialiser<T> {
 public:
@@ -182,6 +179,9 @@ private:
         return std::array<T, N>{ esd::DeserialiseWithoutChecks<T>(serialised.at(I)) ... };
     }
 };
+
+// FIXME the following concepts mean that knowledge of the Class and PolymorphicClass helpers is leaking out of those headers
+// Ideally support for those types would be completely encapsulated within their own headers
 
 template <typename T>
 concept TypeSupportedByEasySerDesViaClassHelper = IsDerivedFromSpecialisationOf<JsonSerialiser<T>, JsonClassSerialiser>;

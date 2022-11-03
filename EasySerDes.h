@@ -7,10 +7,6 @@
 #include "EasySerDesClassHelper.h"
 #include "EasySerDesJsonHelpers.h"
 
-/*
- * TODO insert README text here, or at least point to the README.md file with the explanation in it
- *
- * FIXME this uses template specialisation facing the end user, it uses type erasure internally in the class helper
- */
+// See README.md for usage, examples, and API overview
 
 #endif // EASYSERDES_H

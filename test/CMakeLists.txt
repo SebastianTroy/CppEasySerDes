@@ -11,6 +11,7 @@ add_executable(Tests)
 target_sources(Tests
     PUBLIC
     main.cpp
+    TestBuiltInLanguageTypes.h
     TestBuiltInLanguageTypes.cpp
     TestStdLibrarySupport.cpp
     TestClassHelper.h

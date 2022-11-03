@@ -15,6 +15,16 @@
 using namespace nlohmann;
 
 namespace {
+
+// Useful to tell if typename T is an instance of a particular template, usage e.g. IsInstance<T, std::vector>
+// https://stackoverflow.com/questions/54182239/c-concepts-checking-for-template-instantiation/54191646#54191646
+template <typename T, template <typename...> class Z>
+struct is_specialization_of : std::false_type {};
+template <typename... Args, template <typename...> class Z>
+struct is_specialization_of<Z<Args...>, Z> : std::true_type {};
+template<typename T, template <typename...> class Z>
+concept IsSpecialisationOf = is_specialization_of<T, Z>::value;
+
 template <typename T>
 void RunTest(T value, json::value_t desiredStorageType = json::value_t::null)
 {
@@ -24,7 +34,7 @@ void RunTest(T value, json::value_t desiredStorageType = json::value_t::null)
         auto reSerialised = esd::Serialise(deserialised);
 
         // Check this first so that an error displays nicely comparable json structures
-        if constexpr (!esd::is_specialization_of<T, std::shared_ptr>::value) {
+        if constexpr (!IsSpecialisationOf<T, std::shared_ptr>) {
             // Serialiser for shared_ptr stores meta data for ptr sharedness which will not be the same between serialisations
             REQUIRE(serialised == reSerialised);
         } else {
@@ -32,7 +42,7 @@ void RunTest(T value, json::value_t desiredStorageType = json::value_t::null)
             REQUIRE(serialised.at("wrappedType") == reSerialised.at("wrappedType"));
         }
         // If a pointer type, we want to compare the values, not the pointer itself
-        if constexpr (esd::is_specialization_of<T, std::shared_ptr>::value || esd::is_specialization_of<T, std::unique_ptr>::value) {
+        if constexpr (IsSpecialisationOf<T, std::shared_ptr> || IsSpecialisationOf<T, std::unique_ptr>) {
             REQUIRE(*deserialised == *value);
         } else {
             REQUIRE(deserialised == value);

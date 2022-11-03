@@ -65,45 +65,59 @@ public:
     }
 };
 
-// Specialisation for all numeric types supported by the JSON library
+// Specialisation for all signed integral types supported by the JSON library
 template <typename T>
-requires (std::signed_integral<T> && sizeof(T) <= sizeof(nlohmann::json::number_integer_t))
-      || (std::unsigned_integral<T> && sizeof(T) <= sizeof(nlohmann::json::number_unsigned_t))
-      || (std::floating_point<T> && sizeof(T) <= sizeof(nlohmann::json::number_float_t))
+requires std::signed_integral<T> && (sizeof(T) <= sizeof(nlohmann::json::number_integer_t))
+class JsonSerialiser<T> {
+    public:
+    static bool Validate(const nlohmann::json& serialised)
+    {
+        using InternalType = nlohmann::json::number_integer_t;
+        return MatchType(serialised.type(), nlohmann::json::value_t::number_integer) && serialised.get<InternalType>() == static_cast<InternalType>(Deserialise(serialised));
+    }
+
+    static nlohmann::json Serialise(const T& value)
+    {
+        return value;
+    }
+
+    static T Deserialise(const nlohmann::json& serialised)
+    {
+        return serialised.get<T>();
+    }
+};
+
+// Specialisation for all unsigned integral types supported by the JSON library
+template <typename T>
+requires std::unsigned_integral<T> && (sizeof(T) <= sizeof(nlohmann::json::number_unsigned_t))
+class JsonSerialiser<T> {
+    public:
+    static bool Validate(const nlohmann::json& serialised)
+    {
+        using InternalType = nlohmann::json::number_unsigned_t;
+        return MatchType(serialised.type(), nlohmann::json::value_t::number_unsigned) && serialised.get<InternalType>() == static_cast<InternalType>(Deserialise(serialised));
+    }
+
+    static nlohmann::json Serialise(const T& value)
+    {
+        return value;
+    }
+
+    static T Deserialise(const nlohmann::json& serialised)
+    {
+        return serialised.get<T>();
+    }
+};
+
+// Specialisation for all floating point types supported by the JSON library
+template <typename T>
+requires std::floating_point<T> && (sizeof(T) <= sizeof(nlohmann::json::number_float_t))
 class JsonSerialiser<T> {
 public:
-    // TODO something like this would allow for the collapse the four Validate definitions into a single definition
-    // using JsonNumericType = (std::signed_integral<T> ? nlohmann::json::number_integer_t : (std::unsigned_integral<T> ? nlohmann::json::number_unsigned_t : nlohmann::json::number_t));
-    // private: static inline nlohmann::json::value_t storageType_ = ... as above ish;
-
-    template <typename S = T>
-    requires std::same_as<S, T>
-          && std::signed_integral<S>
     static bool Validate(const nlohmann::json& serialised)
     {
-        return Validate<nlohmann::json::number_integer_t>(serialised, nlohmann::json::value_t::number_integer);
-    }
-
-    template <typename S = T>
-    requires std::same_as<S, T>
-          && std::unsigned_integral<S>
-    static bool Validate(const nlohmann::json& serialised)
-    {
-        return Validate<nlohmann::json::number_unsigned_t>(serialised, nlohmann::json::value_t::number_unsigned);
-    }
-
-    template <typename S = T>
-    requires std::same_as<S, T>
-          && std::floating_point<S>
-    static bool Validate(const nlohmann::json& serialised)
-    {
-        return Validate<nlohmann::json::number_float_t>(serialised, nlohmann::json::value_t::number_float);
-    }
-
-    template <typename JsonInternalStorageType>
-    static bool Validate(const nlohmann::json& serialised, const nlohmann::json::value_t& expectedStorageType)
-    {
-        return MatchType(serialised.type(), expectedStorageType) && serialised.get<JsonInternalStorageType>() == static_cast<JsonInternalStorageType>(Deserialise(serialised));
+        using InternalType = nlohmann::json::number_float_t;
+        return MatchType(serialised.type(), nlohmann::json::value_t::number_float) && serialised.get<InternalType>() == static_cast<InternalType>(Deserialise(serialised));
     }
 
     static nlohmann::json Serialise(const T& value)
@@ -148,7 +162,32 @@ public:
     }
 
 private:
-    static inline std::regex validator = CreateRegex<T>();
+    /**
+     * A helper intended to make checking if a string can be converted to a
+     * value of a particular type.
+     */
+    template <typename S>
+    [[ nodiscard ]] static std::regex CreateRegex();
+
+    static inline std::regex validator = []() -> std::regex
+                                         {
+                                             if constexpr (std::signed_integral<T>) {
+                                                 // FIXME allows values larger than max value, if they have the same number of digits
+                                                 // Aiming for [optional + or -][sequence of 0-9, at least 1, at most std::numeric_limits<T>::digits]
+                                                 std::string regexStr = R"(^[+-]?[0-9]{1,)" + std::to_string(std::numeric_limits<T>::digits10 + 1) +  R"(}$)";
+                                                 return std::regex{ std::move(regexStr) };
+                                             } else if constexpr (std::unsigned_integral<T>) {
+                                                 // FIXME allows values larger than max value, if they have the same number of digits
+                                                 // Aiming for [sequence of 0-9, at least 1, at most std::numeric_limits<T>::digits]
+                                                 std::string regexStr = R"(^[0-9]{1,)" + std::to_string(std::numeric_limits<T>::digits10 + 1) +  R"(}$)";
+                                                 return std::regex{ std::move(regexStr) };
+                                             } else if constexpr (std::floating_point<T>) {
+                                                 // FIXME So much more complex, when have brain need to limit base and mantissa digits according to std::numeric_limits
+                                                 return std::regex{ R"(^([+-]?(?:[[:d:]]+\.?|[[:d:]]*\.[[:d:]]+))(?:[Ee][+-]?[[:d:]]+)?$)" };
+                                             }
+                                             // A regex that never matches anything
+                                             return std::regex{ "^\b$" };
+                                         }();
 };
 
 template <typename T>
