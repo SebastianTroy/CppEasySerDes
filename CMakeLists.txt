@@ -19,10 +19,11 @@ include(catch2)
 add_library(CppEasySerDes INTERFACE
     EasySerDes.h
     EasySerDesCore.h
-    EasySerDesClassHelper.h
     EasySerDesBuiltInTypeSupport.h
     EasySerDesStdLibSupport.h
     EasySerDesJsonHelpers.h
+    EasySerDesClassHelper.h
+    EasySerDesPolymorphicClassHelper.h
 )
 
 add_custom_target(Other

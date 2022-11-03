@@ -2,6 +2,7 @@
 #define EASYSERDESSTDLIBSUPPORT_H
 
 #include "EasySerDesClassHelper.h"
+#include "EasySerDesPolymorphicClassHelper.h"
 
 #include <nlohmann/json.hpp>
 
@@ -136,29 +137,20 @@ class JsonSerialiser<T> {
 public:
     static bool Validate(const nlohmann::json& serialised)
     {
-        return serialised.is_array() && std::ranges::all_of(serialised, [](const auto& item)
-        {
-            return JsonSerialiser<typename T::value_type>::Validate(item);
-        });
+        return serialised.is_array() && std::ranges::all_of(serialised, esd::Validate<typename T::value_type>);
     }
 
     static nlohmann::json Serialise(const T& range)
     {
         nlohmann::json serialisedItems = nlohmann::json::array();
-        std::ranges::transform(range, std::back_inserter(serialisedItems), [](const auto& item)
-        {
-            return JsonSerialiser<typename T::value_type>::Serialise(item);
-        });
+        std::ranges::transform(range, std::back_inserter(serialisedItems), &esd::Serialise<typename T::value_type>);
         return serialisedItems;
     }
 
     static T Deserialise(const nlohmann::json& serialised)
     {
         T items;
-        std::ranges::transform(serialised, std::inserter(items, items.end()), [](const auto& item)
-        {
-            return esd::DeserialiseWithoutChecks<typename T::value_type>(item);
-        });
+        std::ranges::transform(serialised, std::inserter(items, items.end()), esd::DeserialiseWithoutChecks<typename T::value_type>);
         return items;
     }
 };
@@ -168,19 +160,13 @@ class JsonSerialiser<std::array<T, N>> {
 public:
     static bool Validate(const nlohmann::json& serialised)
     {
-        return serialised.is_array() && serialised.size() == N && std::ranges::all_of(serialised, [](const auto& item)
-        {
-            return esd::Validate<T>(item);
-        });
+        return serialised.is_array() && serialised.size() == N && std::ranges::all_of(serialised, esd::Validate<T>);
     }
 
     static nlohmann::json Serialise(const std::array<T, N>& range)
     {
         nlohmann::json serialisedItems = nlohmann::json::array();
-        std::ranges::transform(range, std::back_inserter(serialisedItems), [](const auto& item)
-        {
-            return esd::Serialise<T>(item);
-        });
+        std::ranges::transform(range, std::back_inserter(serialisedItems), esd::Serialise<T>);
         return serialisedItems;
     }
 
@@ -201,14 +187,21 @@ template <typename T>
 concept TypeSupportedByEasySerDesViaClassHelper = IsDerivedFromSpecialisationOf<JsonSerialiser<T>, JsonClassSerialiser>;
 
 template <typename T>
+concept TypeSupportedByEasySerDesViaPolymorphicClassHelper = IsDerivedFromSpecialisationOf<JsonSerialiser<T>, JsonPolymorphicClassSerialiser>;
+
+template <typename T>
 requires TypeSupportedByEasySerDes<T>
 class JsonSerialiser<std::shared_ptr<T>> {
 public:
     static bool Validate(const nlohmann::json& serialised)
     {
-        bool valid = true;
-        valid = valid && serialised.contains(wrappedTypeKey);
-        return JsonSerialiser<T>::Validate(serialised.at(wrappedTypeKey));
+        bool valid = serialised.contains(wrappedTypeKey);
+
+        if constexpr (TypeSupportedByEasySerDesViaPolymorphicClassHelper<T>) {
+            return valid && JsonSerialiser<T>::ValidatePolymorphic(serialised.at(wrappedTypeKey));
+        } else {
+            return valid && JsonSerialiser<T>::Validate(serialised.at(wrappedTypeKey));
+        }
     }
 
     static nlohmann::json Serialise(const std::shared_ptr<T>& shared)
@@ -216,7 +209,11 @@ public:
         nlohmann::json serialisedPtr = nlohmann::json::object();
         std::uintptr_t pointerValue = reinterpret_cast<std::uintptr_t>(shared.get());
         serialisedPtr[uniqueIdentifierKey] = pointerValue;
-        serialisedPtr[wrappedTypeKey] = JsonSerialiser<T>::Serialise(*shared);
+        if constexpr (TypeSupportedByEasySerDesViaPolymorphicClassHelper<T>) {
+            serialisedPtr[wrappedTypeKey] = JsonSerialiser<T>::SerialisePolymorphic(*shared);
+        } else {
+            serialisedPtr[wrappedTypeKey] = JsonSerialiser<T>::Serialise(*shared);
+        }
         return serialisedPtr;
     }
 
@@ -224,7 +221,9 @@ public:
     {
         std::shared_ptr<T> ret = CheckCache(serialised);
         if (!ret) {
-            if constexpr (TypeSupportedByEasySerDesViaClassHelper<T>) {
+            if constexpr (TypeSupportedByEasySerDesViaPolymorphicClassHelper<T>) {
+                ret = JsonSerialiser<T>::DeserialisePolymorphic(serialised.at(wrappedTypeKey));
+            } else if constexpr (TypeSupportedByEasySerDesViaClassHelper<T>) {
                 // Can't just pass a pointer to the std library function
                 auto makeSharedPtr = &esd::JsonSerialiser<T>::template ConstructionArgsForwarder<MakeSharedWrapper>::Invoke;
                 ret = JsonSerialiser<T>::Deserialise(makeSharedPtr, serialised.at(wrappedTypeKey));
@@ -297,21 +296,33 @@ class JsonSerialiser<std::unique_ptr<T>> {
 public:
     static bool Validate(const nlohmann::json& serialised)
     {
-        bool valid = true;
-        valid = valid && serialised.contains(wrappedTypeKey);
-        return JsonSerialiser<T>::Validate(serialised.at(wrappedTypeKey));
+        bool valid = serialised.contains(wrappedTypeKey);
+
+        if constexpr (TypeSupportedByEasySerDesViaPolymorphicClassHelper<T>) {
+            return valid && JsonSerialiser<T>::ValidatePolymorphic(serialised.at(wrappedTypeKey));
+        } else {
+            return valid && JsonSerialiser<T>::Validate(serialised.at(wrappedTypeKey));
+        }
     }
 
     static nlohmann::json Serialise(const std::unique_ptr<T>& shared)
     {
         nlohmann::json serialisedPtr = nlohmann::json::object();
-        serialisedPtr[wrappedTypeKey] = JsonSerialiser<T>::Serialise(*shared);
+
+        if constexpr (TypeSupportedByEasySerDesViaPolymorphicClassHelper<T>) {
+            serialisedPtr[wrappedTypeKey] = JsonSerialiser<T>::SerialisePolymorphic(*shared);
+        } else {
+            serialisedPtr[wrappedTypeKey] = JsonSerialiser<T>::Serialise(*shared);
+        }
+
         return serialisedPtr;
     }
 
     static std::unique_ptr<T> Deserialise(const nlohmann::json& serialised)
     {
-        if constexpr (TypeSupportedByEasySerDesViaClassHelper<T>) {
+        if constexpr (TypeSupportedByEasySerDesViaPolymorphicClassHelper<T>) {
+            return JsonSerialiser<T>::DeserialisePolymorphic(serialised.at(wrappedTypeKey));
+        } else if constexpr (TypeSupportedByEasySerDesViaClassHelper<T>) {
             // Can't just pass a pointer to the std library function
             auto makeUniquePtr = &JsonSerialiser<T>::template ConstructionArgsForwarder<MakeUniqueWrapper>::Invoke;
             return JsonSerialiser<T>::Deserialise(makeUniquePtr, serialised.at(wrappedTypeKey));

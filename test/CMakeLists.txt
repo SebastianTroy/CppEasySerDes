@@ -15,12 +15,10 @@ target_sources(Tests
     TestStdLibrarySupport.cpp
     TestClassHelper.h
     TestClassHelper.cpp
+    TestPolymorphicClassHelper.h
+    TestPolymorphicClassHelper.cpp
     TestJsonHelpers.h
     TestJsonHelpers.cpp
-    TestJsonPolymorphicSerialisationHelper.h
-    TestJsonPolymorphicSerialisationHelper.cpp
-    TestJsonSerialisationHelper.h
-    TestTypeName.cpp
 )
 
 target_include_directories(Tests

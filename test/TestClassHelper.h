@@ -124,10 +124,15 @@ std::ostream& operator<<(std::ostream& ostr, const NestedTestType& value)
     return ostr << "NestedTestType{" << value.GetA() << ", " << value.b_ << "}";
 }
 
+/*
+ * EasySerDes integration
+ */
+
 namespace esd {
 
 template<>
-struct JsonSerialiser<TrivialTestType> : public JsonClassSerialiser<TrivialTestType, int, std::vector<int>, std::string> {
+class JsonSerialiser<TrivialTestType> : public JsonClassSerialiser<TrivialTestType, int, std::vector<int>, std::string> {
+public:
     static void SetupHelper(HelperType& h)
     {
         h.RegisterConstruction(h.CreateParameter(&TrivialTestType::a_),
@@ -137,7 +142,8 @@ struct JsonSerialiser<TrivialTestType> : public JsonClassSerialiser<TrivialTestT
 };
 
 template<>
-struct JsonSerialiser<NonTrivialTestType> : public JsonClassSerialiser<NonTrivialTestType, int> {
+class JsonSerialiser<NonTrivialTestType> : public JsonClassSerialiser<NonTrivialTestType, int> {
+public:
     static void SetupHelper(HelperType& h)
     {
         h.RegisterConstruction(h.CreateParameter(&NonTrivialTestType::GetA));
@@ -146,7 +152,8 @@ struct JsonSerialiser<NonTrivialTestType> : public JsonClassSerialiser<NonTrivia
 };
 
 template<>
-struct JsonSerialiser<InitialisedTestType> : public JsonClassSerialiser<InitialisedTestType> {
+class JsonSerialiser<InitialisedTestType> : public JsonClassSerialiser<InitialisedTestType> {
+public:
     static void SetupHelper(HelperType& h)
     {
         h.RegisterInitialisation(&InitialisedTestType::Initialise,
@@ -157,7 +164,8 @@ struct JsonSerialiser<InitialisedTestType> : public JsonClassSerialiser<Initiali
 };
 
 template<>
-struct JsonSerialiser<NestedTestType> : public JsonClassSerialiser<NestedTestType, NonTrivialTestType> {
+class JsonSerialiser<NestedTestType> : public JsonClassSerialiser<NestedTestType, NonTrivialTestType> {
+public:
     static void SetupHelper(HelperType& h)
     {
         h.RegisterConstruction(h.CreateParameter(&NestedTestType::GetA));
@@ -165,5 +173,6 @@ struct JsonSerialiser<NestedTestType> : public JsonClassSerialiser<NestedTestTyp
     }
 };
 
-};
+} // end namespace esd
+
 #endif // TESTCLASSHELPER_H
