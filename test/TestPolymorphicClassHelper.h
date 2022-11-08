@@ -113,7 +113,6 @@ std::ostream& operator<<(std::ostream& ostr, const GrandChildTestType& value)
  * EasySerDes integration
  */
 
-// FIXME put the JsonSerialiser<> declaration outside of the esd namespace so users can override specific serialisers if tehy want to
 template<>
 class esd::JsonSerialiser<GrandChildTestType> : public esd::JsonPolymorphicClassSerialiser<GrandChildTestType, double, bool> {
 public:
@@ -131,7 +130,7 @@ public:
     {
         h.RegisterConstruction(h.CreateParameter(&ChildTestTypeB::d_),
                                h.CreateParameter(&ChildTestTypeB::b_));
-        RegisterChild<GrandChildTestType>();
+        RegisterChildTypes<GrandChildTestType>();
     }
 };
 
@@ -151,11 +150,7 @@ public:
     {
         h.RegisterConstruction(h.CreateParameter(&BaseTestType::d_));
 
-        RegisterChild<ChildTestTypeA>();
-        RegisterChild<ChildTestTypeB>();
-
-        // FIXME the following line should be prohibited by a constraint, but it compiles and causes errors
-        // RegisterChild<GrandChildTestType>();
+        RegisterChildTypes<ChildTestTypeA, ChildTestTypeB>();
     }
 };
 

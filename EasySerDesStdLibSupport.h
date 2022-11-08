@@ -190,7 +190,9 @@ template <typename T>
 concept TypeSupportedByEasySerDesViaPolymorphicClassHelper = IsDerivedFromSpecialisationOf<JsonSerialiser<T>, JsonPolymorphicClassSerialiser>;
 
 template <typename T>
-requires TypeSupportedByEasySerDes<T>
+requires TypeSupportedByEasySerDesViaClassHelper<T>
+      || TypeSupportedByEasySerDesViaPolymorphicClassHelper<T>
+      || requires (T, nlohmann::json j) { { std::make_shared<T>(esd::DeserialiseWithoutChecks<T>(j)) } -> std::same_as<std::shared_ptr<T>>; }
 class JsonSerialiser<std::shared_ptr<T>> {
 public:
     static bool Validate(const nlohmann::json& serialised)
@@ -229,8 +231,6 @@ public:
                 ret = JsonSerialiser<T>::Deserialise(makeSharedPtr, serialised.at(wrappedTypeKey));
             } else if constexpr (std::is_move_constructible_v<T> || std::is_copy_constructible_v<T>) {
                 ret = std::make_shared<T>(esd::DeserialiseWithoutChecks<T>(serialised.at(wrappedTypeKey)));
-            } else {
-                // FIXME this ought to be a static_assert or a requirement at the top level of this template specialisation
             }
             AddToCache(serialised, ret);
         }
@@ -291,7 +291,9 @@ private:
 };
 
 template <typename T>
-requires TypeSupportedByEasySerDes<T>
+requires TypeSupportedByEasySerDesViaClassHelper<T>
+      || TypeSupportedByEasySerDesViaPolymorphicClassHelper<T>
+      || requires (T, nlohmann::json j) { { std::make_unique<T>(esd::DeserialiseWithoutChecks<T>(j)) } -> std::same_as<std::unique_ptr<T>>; }
 class JsonSerialiser<std::unique_ptr<T>> {
 public:
     static bool Validate(const nlohmann::json& serialised)

@@ -33,6 +33,21 @@ namespace {
     template <template <class...> class Z, class... Args>
     void is_derived_from_specialization_of(const Z<Args...>&);
 
+    template <typename T, typename... Ts>
+    concept NotDerivedFromAnyOf = (... && !(std::derived_from<T, Ts> && !std::same_as<T, Ts>));
+
+    template <typename T, typename...Ts>
+    constexpr bool AllTypesAreUniqueRecursive()
+    {
+        if constexpr (sizeof...(Ts) > 0) {
+            return (... && !std::same_as<T, Ts>) && AllTypesAreUniqueRecursive<Ts...>();
+        }
+        return true;
+    }
+
+    template <typename...Ts>
+    concept AllTypesAreUnique = AllTypesAreUniqueRecursive<Ts...>();
+
 } // end anon namespace
 
 template <class T, template <class...> class Z>
@@ -111,46 +126,19 @@ public:
                                                   });
     }
 
-    template <typename ChildType>
-    requires std::derived_from<ChildType, T>
-             && TypeSupportedByEasySerDes<ChildType>
-             && IsDerivedFromSpecialisationOf<JsonSerialiser<ChildType>, esd::JsonPolymorphicClassSerialiser>
-    static void RegisterChild()
+    template <typename... ChildTypes>
+    requires (sizeof...(ChildTypes) > 0)
+          && AllTypesAreUnique<ChildTypes...>
+          && (... && std::derived_from<ChildTypes, T>)
+          && (... && NotDerivedFromAnyOf<ChildTypes, ChildTypes...>)
+          && (... && TypeSupportedByEasySerDes<ChildTypes>)
+          && (... && IsDerivedFromSpecialisationOf<JsonSerialiser<ChildTypes>, esd::JsonPolymorphicClassSerialiser>)
+    static void RegisterChildTypes()
     {
-        std::string childTypeName{ TypeName<ChildType>() };
-
-        bool alreadyRegistered = std::ranges::any_of(childHelpers_, [&](const ChildTypeHelper& h)
-        {
-            return h.typeName_ == childTypeName;
-        });
-
-        if (!alreadyRegistered) {
-            childHelpers_.emplace_back(
-                childTypeName,
-                [](const nlohmann::json& serialised) -> bool
-                {
-                    return JsonSerialiser<ChildType>::ValidatePolymorphic(serialised);
-                },
-                [=](const T& toSerialise) -> nlohmann::json
-                {
-                    return JsonSerialiser<ChildType>::SerialisePolymorphic(dynamic_cast<const ChildType&>(toSerialise));
-                },
-                [](const nlohmann::json& serialised) -> std::unique_ptr<T>
-                {
-                    return JsonSerialiser<ChildType>::DeserialisePolymorphic(serialised);
-                },
-
-                [](const T& instance) -> bool
-                {
-                    return dynamic_cast<const ChildType*>(&instance) != nullptr;
-                },
-                [](const std::string& typeName) -> bool
-                {
-                    return JsonSerialiser<ChildType>::RecursivelyCheckTypeName(typeName);
-                }
-            );
-        }
+        childHelpers_.clear();
+        (..., RegisterChild<ChildTypes>());
     }
+
 private:
     struct ChildTypeHelper {
         std::string typeName_;
@@ -174,6 +162,36 @@ private:
 
     static inline std::string typeName_ = std::string(TypeName<T>());
     static inline std::vector<ChildTypeHelper> childHelpers_ = {};
+
+    template <typename ChildType>
+    static void RegisterChild()
+    {
+        std::string childTypeName{ TypeName<ChildType>() };
+
+        childHelpers_.emplace_back(
+            childTypeName,
+            [](const nlohmann::json& serialised) -> bool
+            {
+                return JsonSerialiser<ChildType>::ValidatePolymorphic(serialised);
+            },
+            [=](const T& toSerialise) -> nlohmann::json
+            {
+                return JsonSerialiser<ChildType>::SerialisePolymorphic(dynamic_cast<const ChildType&>(toSerialise));
+            },
+            [](const nlohmann::json& serialised) -> std::unique_ptr<T>
+            {
+                return JsonSerialiser<ChildType>::DeserialisePolymorphic(serialised);
+            },
+            [](const T& instance) -> bool
+            {
+                return dynamic_cast<const ChildType*>(&instance) != nullptr;
+            },
+            [](const std::string& typeName) -> bool
+            {
+                return JsonSerialiser<ChildType>::RecursivelyCheckTypeName(typeName);
+            }
+        );
+    }
 };
 
 } // end namespace esd

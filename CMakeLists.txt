@@ -7,8 +7,8 @@ set(CMAKE_INCLUDE_CURRENT_DIR ON)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-option(CPP_EASY_SERDES_BuildTests "Build an executable that generates an example trace file." ON)
-option(CPP_EASY_SERDES_RunTests "Build an executable that generates an example trace file." OFF)
+option(CPP_EASY_SERDES_BuildTests "Build an executable containing Catch2 test cases for EasySerDes." ON)
+option(CPP_EASY_SERDES_RunTests "Run the tests automatically each time the project is built." OFF)
 
 include(FetchContent)
 

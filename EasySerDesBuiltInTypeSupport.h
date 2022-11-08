@@ -131,23 +131,21 @@ public:
     }
 };
 
-// Specialisation for all numeric types that are NOT supported by the JSON library
-// FIXME only tests for "long double" as I do not have a compiler capable of larger integer types...
+// Specialisation for all signed integer types that are NOT supported by the JSON library
+// FIXME untested due to compiler lacking unsigned types larger than sizeof(nlohmann::json::number_integer_t)
 template <typename T>
-requires (std::signed_integral<T> && sizeof(T) > sizeof(nlohmann::json::number_integer_t))
-      || (std::unsigned_integral<T> && sizeof(T) > sizeof(nlohmann::json::number_unsigned_t))
-      || (std::floating_point<T> && sizeof(T) > sizeof(nlohmann::json::number_float_t))
+requires std::signed_integral<T> && (sizeof(T) > sizeof(nlohmann::json::number_integer_t))
 class JsonSerialiser<T> {
-public:
+    public:
     static bool Validate(const nlohmann::json& serialised)
     {
-        return serialised.type() == nlohmann::json::value_t::string && std::regex_match(serialised.get<std::string>(), validator);
+        return serialised.type() == nlohmann::json::value_t::string && std::regex_match(serialised.get<std::string>(), validator_);
     }
 
     static nlohmann::json Serialise(const T& value)
     {
         std::stringstream valueStream;
-        valueStream.precision(std::numeric_limits<T>::digits);
+        valueStream.precision(std::numeric_limits<T>::max_digits10);
         valueStream << value;
         return valueStream.str();
     }
@@ -155,39 +153,81 @@ public:
     static T Deserialise(const nlohmann::json& serialised)
     {
         std::stringstream valueStream(serialised.get<std::string>());
-        valueStream.precision(std::numeric_limits<T>::digits);
+        valueStream.precision(std::numeric_limits<T>::max_digits10);
         T value;
         valueStream >> value;
         return value;
     }
 
 private:
-    /**
-     * A helper intended to make checking if a string can be converted to a
-     * value of a particular type.
-     */
-    template <typename S>
-    [[ nodiscard ]] static std::regex CreateRegex();
+    // Aiming for [optional + or -][sequence of 0-9, at least 1, at most std::numeric_limits<T>::max_digits10]
+    // FIXME does not constrain values to between std::numeric_limits<T>::min and std::numeric_limits<T>::max
+    static inline std::regex validator_{ R"(^[+-]?[0-9]{1,)" + std::to_string(std::numeric_limits<T>::max_digits10) +  R"(}$)" };
+};
 
-    static inline std::regex validator = []() -> std::regex
-                                         {
-                                             if constexpr (std::signed_integral<T>) {
-                                                 // FIXME allows values larger than max value, if they have the same number of digits
-                                                 // Aiming for [optional + or -][sequence of 0-9, at least 1, at most std::numeric_limits<T>::digits]
-                                                 std::string regexStr = R"(^[+-]?[0-9]{1,)" + std::to_string(std::numeric_limits<T>::digits10 + 1) +  R"(}$)";
-                                                 return std::regex{ std::move(regexStr) };
-                                             } else if constexpr (std::unsigned_integral<T>) {
-                                                 // FIXME allows values larger than max value, if they have the same number of digits
-                                                 // Aiming for [sequence of 0-9, at least 1, at most std::numeric_limits<T>::digits]
-                                                 std::string regexStr = R"(^[0-9]{1,)" + std::to_string(std::numeric_limits<T>::digits10 + 1) +  R"(}$)";
-                                                 return std::regex{ std::move(regexStr) };
-                                             } else if constexpr (std::floating_point<T>) {
-                                                 // FIXME So much more complex, when have brain need to limit base and mantissa digits according to std::numeric_limits
-                                                 return std::regex{ R"(^([+-]?(?:[[:d:]]+\.?|[[:d:]]*\.[[:d:]]+))(?:[Ee][+-]?[[:d:]]+)?$)" };
-                                             }
-                                             // A regex that never matches anything
-                                             return std::regex{ "^\b$" };
-                                         }();
+// Specialisation for all unsigned integer types that are NOT supported by the JSON library
+// FIXME untested due to compiler lacking unsigned types larger than sizeof(nlohmann::json::number_unsigned_t)
+template <typename T>
+requires std::unsigned_integral<T> && (sizeof(T) > sizeof(nlohmann::json::number_unsigned_t))
+class JsonSerialiser<T> {
+    public:
+    static bool Validate(const nlohmann::json& serialised)
+    {
+        return serialised.type() == nlohmann::json::value_t::string && std::regex_match(serialised.get<std::string>(), validator_);
+    }
+
+    static nlohmann::json Serialise(const T& value)
+    {
+        std::stringstream valueStream;
+        valueStream.precision(std::numeric_limits<T>::max_digits10);
+        valueStream << value;
+        return valueStream.str();
+    }
+
+    static T Deserialise(const nlohmann::json& serialised)
+    {
+        std::stringstream valueStream(serialised.get<std::string>());
+        valueStream.precision(std::numeric_limits<T>::max_digits10);
+        T value;
+        valueStream >> value;
+        return value;
+    }
+
+private:
+    // Aiming for [sequence of 0-9, at least 1, at most std::numeric_limits<T>::max_digits10]
+    // FIXME does not constrain values to between 0 and std::numeric_limits<T>::max
+    static inline std::regex validator_{ R"(^[0-9]{1,)" + std::to_string(std::numeric_limits<T>::max_digits10) +  R"(}$)" };
+};
+
+// Specialisation for all floating point types that are NOT supported by the JSON library
+template <typename T>
+requires std::floating_point<T> && (sizeof(T) > sizeof(nlohmann::json::number_float_t))
+class JsonSerialiser<T> {
+public:
+    static bool Validate(const nlohmann::json& serialised)
+    {
+        return serialised.type() == nlohmann::json::value_t::string && std::regex_match(serialised.get<std::string>(), validator_);
+    }
+
+    static nlohmann::json Serialise(const T& value)
+    {
+        std::stringstream valueStream;
+        valueStream.precision(std::numeric_limits<T>::max_digits10);
+        valueStream << value;
+        return valueStream.str();
+    }
+
+    static T Deserialise(const nlohmann::json& serialised)
+    {
+        std::stringstream valueStream(serialised.get<std::string>());
+        valueStream.precision(std::numeric_limits<T>::max_digits10);
+        T value;
+        valueStream >> value;
+        return value;
+    }
+
+private:
+    static inline std::regex validator_{ R"(^([+-]?(?:[[:d:]]+\.?|[[:d:]]*\.[[:d:]]+))(?:[Ee][+-]?[[:d:]]+)?$)" };
 };
 
 template <typename T>

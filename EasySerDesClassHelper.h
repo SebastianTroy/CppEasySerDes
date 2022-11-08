@@ -36,8 +36,10 @@ namespace {
  * Forward declaration of helper type, because it was desirable to define
  * JsonClassSerialiser first.
  *
- * FIXME make sure an internal helper is actually necessary! Calls could all
- * just be static
+ * TODO make sure an internal helper is actually necessary! Calls could all
+ * just be static and user function to implement could be refactored to
+ * `static void Configure()` (but then how would we make sure Configure is
+ * called?)
  */
 template <typename T, typename... ConstructionArgs>
 requires std::is_class_v<T>
@@ -635,16 +637,8 @@ private:
                                              { [=](const T& source, nlohmann::json& target)
                                                {
                                                    if constexpr (std::is_invocable_v<Invocable, const T&>) {
-                                                       if (customValidator.has_value()) {
-                                                           // FIXME we shouldn't wait till load time to know we've saved an invalid value! but an assert feels wrong...
-                                                           assert(std::invoke(customValidator.value(), std::invoke(valueGetter, source)));
-                                                       }
                                                        target[label.value()] = esd::Serialise<ParameterType>(std::invoke(valueGetter, source));
                                                    } else if constexpr (std::is_invocable_v<Invocable>) {
-                                                       if (customValidator.has_value()) {
-                                                           // FIXME we shouldn't wait till load time to know we've saved an invalid value! but an assert feels wrong...
-                                                           assert(std::invoke(customValidator.value(), std::invoke(valueGetter)));
-                                                       }
                                                        target[label.value()] = esd::Serialise<ParameterType>(std::invoke(valueGetter));
                                                    }
                                                } },
@@ -679,16 +673,8 @@ private:
                                              { [=](const T& source, nlohmann::json& target)
                                                {
                                                    if constexpr (std::is_invocable_v<InvocableGetter, const T&>) {
-                                                       if (customValidator.has_value()) {
-                                                           // FIXME we shouldn't wait till load time to know we've saved an invalid value! but an assert feels wrong...
-                                                           assert(std::invoke(customValidator.value(), std::invoke(valueGetter, source)));
-                                                       }
                                                        target[label.value()] = esd::Serialise<ParameterType>(std::invoke(valueGetter, source));
                                                    } else if constexpr (std::is_invocable_v<InvocableGetter>) {
-                                                       if (customValidator.has_value()) {
-                                                           // FIXME we shouldn't wait till load time to know we've saved an invalid value! but an assert feels wrong...
-                                                           assert(std::invoke(customValidator.value(), std::invoke(valueGetter)));
-                                                       }
                                                        target[label.value()] = esd::Serialise<ParameterType>(std::invoke(valueGetter));
                                                    }
                                                } },
