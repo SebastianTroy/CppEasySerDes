@@ -119,11 +119,10 @@ public:
 
     static bool RecursivelyCheckTypeName(const std::string& typeName)
     {
-        return typeName == typeName_
-            || std::ranges::any_of(childHelpers_, [&](const ChildTypeHelper& h)
-                                                  {
-                                                      return h.recursiveTypeNameChecker_(typeName);
-                                                  });
+        return typeName == typeName_ || std::ranges::any_of(childHelpers_, [&](const ChildTypeHelper& h)
+                                                                           {
+                                                                               return h.recursiveTypeNameChecker_(typeName);
+                                                                           });
     }
 
     template <typename... ChildTypes>

@@ -169,7 +169,6 @@ TEST_CASE("BuiltInTypes", "[json]")
         RunFailureTest<long double>(false, 'c', -'h', "Foo", json::parse("[ \"647322454235.5674832985746452456643345425432664256260\" ]").at(0), json::parse("[ \"-857242545656342682346527.322345654264245683234457560\" ]").at(0));
     }
 
-    // TODO create an EnumHelper that allows the user to set a max and min value, or set allowed values, or set valid flags etc
     SECTION("enum")
     {
         RunTest<TestEasySerDesEnum>(First);

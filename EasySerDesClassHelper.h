@@ -540,12 +540,11 @@ public:
 
     ///
     /// Overload for a getter that accepts a "const T&" parameter, and any
-    /// setter that accepts a reference to the target, and a reference to the
-    /// deserialised value.
+    /// setter that accepts a reference to the target, and a deserialised value.
     ///
     template <typename Getter, typename Setter>
     requires std::is_invocable_v<Getter, const T&>
-          && std::is_invocable_v<Setter, T&, const ReturnTypeNoCVRef<Getter, const T&>&>
+          && std::is_invocable_v<Setter, T&, ReturnTypeNoCVRef<Getter, const T&>>
     void RegisterVariable(Getter&& getter, Setter&& setter, std::optional<std::string>&& label = std::nullopt, std::optional<std::function<bool(const ReturnTypeNoCVRef<Getter, const T&>&)>>&& customValidator = std::nullopt)
     {
         using ParamType = ReturnTypeNoCVRef<Getter, const T&>;
@@ -558,12 +557,11 @@ public:
 
     ///
     /// Overload for a getter that accepts no parameters, and any setter that
-    /// accepts a reference to the target, and a reference to the deserialised
-    /// value.
+    /// accepts a reference to the target, and a deserialised value.
     ///
     template <typename Getter, typename Setter>
     requires std::is_invocable_v<Getter>
-          && std::is_invocable_v<Setter, T&, const ReturnTypeNoCVRef<Getter>&>
+          && std::is_invocable_v<Setter, T&, ReturnTypeNoCVRef<Getter>>
     void RegisterVariable(Getter&& getter, Setter&& setter, std::optional<std::string>&& label = std::nullopt, std::optional<std::function<bool(const ReturnTypeNoCVRef<Getter>&)>>&& customValidator = std::nullopt)
     {
         using ParamType = ReturnTypeNoCVRef<Getter>;
