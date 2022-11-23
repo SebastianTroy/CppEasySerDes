@@ -107,7 +107,7 @@ public:
     /// defining the construction. Parameter<> is a templated type, and is not
     /// visible to the user, meaning that they have to create a Parameter using
     /// this API, and they have to do it inside a call to SetConstruction (or
-    /// RegisterInitialisation).
+    /// AddInitialisationCall).
     ///
 
     /**
@@ -188,8 +188,8 @@ public:
     }
 
     ///
-    /// RegisterInitialisation
-    /// ----------------------
+    /// AddInitialisationCall
+    /// ---------------------
     ///
     /// The intent here was to allow the user to easily and clearly state how
     /// their type's state should be initialised, via one or more calls to
@@ -205,7 +205,7 @@ public:
     /// Instead I have opted to combine the steps of registering the values, and
     /// defining the function calls. Parameter<> is a templated type, and is not
     /// visible to the user, meaning that they have to create a Parameter using
-    /// this API, and they have to do it inside a call to RegisterInitialisation
+    /// this API, and they have to do it inside a call to AddInitialisationCall
     /// (or SetConstruction).
     ///
 
@@ -220,9 +220,9 @@ public:
     template <typename MemberFunctionPointer, typename... Ts>
     requires std::is_member_function_pointer_v<MemberFunctionPointer>
           && std::is_invocable_v<MemberFunctionPointer, T&, Ts...>
-    static void RegisterInitialisation(MemberFunctionPointer initialisationCall, Parameter<Ts>... params)
+    static void AddInitialisationCall(MemberFunctionPointer initialisationCall, Parameter<Ts>... params)
     {
-        helper_.RegisterInitialisation(initialisationCall, std::move(params)...);
+        helper_.AddInitialisationCall(initialisationCall, std::move(params)...);
     }
 
 
@@ -249,9 +249,9 @@ public:
           && std::is_invocable_v<MemberFunctionPointer, T&, Ts...>
           && std::is_invocable_r_v<bool, Validator, const Ts&...>
           && (sizeof...(Ts) > 1)
-    static void RegisterInitialisation(Validator parameterValidator, MemberFunctionPointer initialisationCall, Parameter<Ts>... params)
+    static void AddInitialisationCall(Validator parameterValidator, MemberFunctionPointer initialisationCall, Parameter<Ts>... params)
     {
-        helper_.RegisterInitialisation(std::forward<Validator>(parameterValidator), initialisationCall, std::move(params)...);
+        helper_.AddInitialisationCall(std::forward<Validator>(parameterValidator), initialisationCall, std::move(params)...);
     }
 
     ///
@@ -262,7 +262,7 @@ public:
     /// values need to be stored for a given type, and how to use them during
     /// deserialisation. Ideally in a way that preserves type information so
     /// that users don't need to explicitly define the template parameters for
-    /// their calls to SetConstruction and RegisterInitialisation.
+    /// their calls to SetConstruction and AddInitialisationCall.
     ///
     /// To achieve this CreateParameter is similar to RegisterVariable, except
     /// it only needs to be told how to get the value during serialisation, this
@@ -400,7 +400,7 @@ public:
      * `(T&, const ValueType&)` parameters, where ValueType is the same type
      * returned by the getter.
      *
-     * FIXME this is duplicate behaviour to RegisterInitialisation, but restricted to a single parameter setter, but accepting also a non member function as the setter...
+     * FIXME this is duplicate behaviour to AddInitialisationCall, but restricted to a single parameter setter, but accepting also a non member function as the setter...
      *
      * This call uses a seperate getter and setter for serialisation and
      * deserialisation respectively. This is necessary when the value is not a
@@ -742,7 +742,7 @@ public:
     template <typename MemberFunctionPointer, typename... Ts>
     requires std::is_member_function_pointer_v<MemberFunctionPointer>
           && std::is_invocable_v<MemberFunctionPointer, T&, Ts...>
-    void RegisterInitialisation(MemberFunctionPointer initialisationCall, Parameter<Ts>... params)
+    void AddInitialisationCall(MemberFunctionPointer initialisationCall, Parameter<Ts>... params)
     {
         initialisationCalls_.push_back([=](const nlohmann::json& serialised, T& target) -> void
         {
@@ -760,14 +760,14 @@ public:
     requires std::is_member_function_pointer_v<MemberFunctionPointer>
           && std::is_invocable_v<MemberFunctionPointer, T&, Ts...>
           && std::is_invocable_r_v<bool, Validator, const Ts&...>
-    void RegisterInitialisation(Validator parameterValidator, MemberFunctionPointer initialisationCall, Parameter<Ts>... params)
+    void AddInitialisationCall(Validator parameterValidator, MemberFunctionPointer initialisationCall, Parameter<Ts>... params)
     {
         interdependantVariablesValidators_.push_back([=, validator = std::forward<Validator>(parameterValidator)](const nlohmann::json& serialised) -> bool
         {
             return std::invoke(validator, (esd::DeserialiseWithoutChecks<Ts>(serialised.at(params.parameterKey_)))...);
         });
 
-        RegisterInitialisation(initialisationCall, std::move(params)...);
+        AddInitialisationCall(initialisationCall, std::move(params)...);
     }
 
     template <class Invocable>

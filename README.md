@@ -20,7 +20,7 @@ A library for easy conversion of C++ types to/from JSON, allowing for a concise 
    - [esd::JsonSerialiser](#esdJsonSerialiser)
    - [esd::JsonClassSerialiser](#esdJsonClassSerialiser)
      - [SetConstruction](#esdJsonClassSerialiserSetConstruction)
-     - [RegisterInitialisation](#esdJsonClassSerialiserRegisterInitialisation)
+     - [AddInitialisationCall](#esdJsonClassSerialiserAddInitialisationCall)
      - [CreateParameter](#esdJsonClassSerialiserCreateParameter)
      - [RegisterVariable](#esdJsonClassSerialiserRegisterVariable)
      - [DefinePostSerialiseAction](#esdJsonClassSerialiserDefinePostSerialiseAction)
@@ -198,7 +198,7 @@ public:
         SetConstruction(CreateParameter(&ContrivedType::GetB));
 
         // First we specify what the initialisation call is, then we specify the parameters the same way we do for the constructor
-        RegisterInitialisation(&ContrivedType::Initialise, CreateParameter(&ContrivedType::a_), CreateParameter(&ContrivedType::GetC));
+        AddInitialisationCall(&ContrivedType::Initialise, CreateParameter(&ContrivedType::a_), CreateParameter(&ContrivedType::GetC));
 
         // Custom Getter or Setters can be provided for any variable or parameter, not only member pointers are supported
         auto customGetD = [](const ContrivedType& toSerialise) -> TrivialType
@@ -508,13 +508,13 @@ SetConstruction([](int i, const std::string& s){ return i < s.size(); }, CreateP
 
 [Back to Index](#Table-of-Contents)
 
-#### esd::JsonClassSerialiser::RegisterInitialisation
+#### esd::JsonClassSerialiser::AddInitialisationCall
 -----------------------------------------------------
 
 Some types may not complete their initialisation within a constructor, but instead require a subsequent call to some initialise function.
 As many initialise calls can be registered as necessary.
-`RegisterInitialisation` takes a member function pointer, to a public member function of the target type, and a series of `Parameter`s which are created by the helper.
-The actual type of `Parameter` is private in this context, so a Parameter has to be created in place within the call to `RegisterInitialisation`.
+`AddInitialisationCall` takes a member function pointer, to a public member function of the target type, and a series of `Parameter`s which are created by the helper.
+The actual type of `Parameter` is private in this context, so a Parameter has to be created in place within the call to `AddInitialisationCall`.
 
 ````C++
 class T {
@@ -525,13 +525,13 @@ public:
 ````C++
 static void Configure()
 {
-    RegisterInitialisation(&T::Initialise, CreateParameter(...), CreateParameter(...));
+    AddInitialisationCall(&T::Initialise, CreateParameter(...), CreateParameter(...));
 }
 ````
 `CreateParameter` is a template, and while the type will be **automatically deduced**, it is important that the deduced types match the provided initialise function's signature, ignoring constness, references and r values e.t.c.
 In the above examplethe parameters must be equivalent to the follwoing
 ````C++
-RegisterInitialisation(CreateParameter<bool>(...), CreateParameter<std::string>(...));
+AddInitialisationCall(CreateParameter<bool>(...), CreateParameter<std::string>(...));
 ````
 While each parameter may have its own individual validation, in some cases it may be desirable to check the validity of the parameters relative to each other,
 this can be important to prevent program crashes due to invalid parameters that individually evaluated as valid values.
@@ -545,9 +545,9 @@ bool ValidateFunc(bool b, const std::string& s)
 ````
 ````C++
 // Defer to an existing function
-RegisterInitialisation(&ValidateFunc, CreateParameter<bool>(...), CreateParameter<std::string>(...));
+AddInitialisationCall(&ValidateFunc, CreateParameter<bool>(...), CreateParameter<std::string>(...));
 // OR use a lambda
-RegisterInitialisation([](bool b, const std::string& s){ return b == s.empty(); }, CreateParameter<bool>(...), CreateParameter<std::string>(...));
+AddInitialisationCall([](bool b, const std::string& s){ return b == s.empty(); }, CreateParameter<bool>(...), CreateParameter<std::string>(...));
 ````
 
 [Back to Index](#Table-of-Contents)
@@ -555,7 +555,7 @@ RegisterInitialisation([](bool b, const std::string& s){ return b == s.empty(); 
 #### esd::JsonClassSerialiser::CreateParameter
 ----------------------------------------------
 
-This function is used with both `SetConstruction` and `RegisterInitialisation`, as both require `0` or more `CreateParameter` return types as input.
+This function is used with both `SetConstruction` and `AddInitialisationCall`, as both require `0` or more `CreateParameter` return types as input.
 The role of this function is to tell the library how to get the values needed to construct our type and call any initialise functions.
 
 The `getter` parameter of the first overload can be:
@@ -780,7 +780,7 @@ Each child type must also have a defined `esd::JsonSerialiser<ChildT>` that exte
  [ ] Change type names to match header names
  [x] Refactor `void SetupHelper()` to `void Configure()`
  [x] Refactor `RegisterConstruction` to `SetConstruction` so it is clear it should only be called once
- [ ] Refactor `RegisterInitialisation` to `AddInitialisationCall` so it is clear it can be called multiple times
+ [x] Refactor `RegisterInitialisation` to `AddInitialisationCall` so it is clear it can be called multiple times
  [ ] Refactor `RegisterChildTypes` to `SetChildTypes` so it is clear it should be called only once
  [ ] Add to website and link to website in README
  [ ] In the "Adding It To Your Own Project" section, link to one of my projects that uses this library as a complete example

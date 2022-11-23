@@ -156,10 +156,10 @@ class JsonSerialiser<InitialisedTestType> : public JsonClassSerialiser<Initialis
 public:
     static void Configure()
     {
-        RegisterInitialisation(&InitialisedTestType::Initialise,
-                               CreateParameter(&InitialisedTestType::GetA),
-                               CreateParameter(&InitialisedTestType::GetB),
-                               CreateParameter(&InitialisedTestType::GetC));
+        AddInitialisationCall(&InitialisedTestType::Initialise,
+                              CreateParameter(&InitialisedTestType::GetA),
+                              CreateParameter(&InitialisedTestType::GetB),
+                              CreateParameter(&InitialisedTestType::GetC));
     }
 };
 
