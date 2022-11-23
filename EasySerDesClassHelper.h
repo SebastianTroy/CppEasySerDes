@@ -40,7 +40,7 @@ namespace {
     /**
      * Forward declaration of helper type, because it was desirable to define
      * JsonClassSerialiser first. This helper encapsulates implementation
-     * details, and also makes it easy to call SetupHelper once.
+     * details, and also makes it easy to call Configure once.
      */
     template <typename T, typename... ConstructionArgs>
     requires std::is_class_v<T>
@@ -464,7 +464,7 @@ public:
     ///
     /// These are declared publically so that when the user specialises a
     /// esd::JsonSerialiser that extends this type, they only need to implement
-    /// the SetupHelper method.
+    /// the Configure method.
     ///
 
     /**
@@ -561,7 +561,7 @@ public:
 
 private:
     using HelperType = esd::InternalHelper<T, ConstructionArgs...>;
-    static inline HelperType helper_ = [](){ HelperType h; JsonSerialiser<T>::SetupHelper(); return h; }();
+    static inline HelperType helper_ = [](){ HelperType h; JsonSerialiser<T>::Configure(); return h; }();
 };
 
 namespace {

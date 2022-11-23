@@ -50,7 +50,7 @@ template <typename T1, typename T2>
 class JsonSerialiser<std::pair<T1, T2>> : public JsonClassSerialiser<std::pair<T1, T2>, T1, T2> {
 public:
     // FIXME use "HelperType" when it supports templated types
-    static void SetupHelper()
+    static void Configure()
     {
         // FIXME comment on this name lookup failure in the documentation (appears to only affect support for templated types)
         JsonSerialiser::RegisterConstruction(JsonSerialiser::CreateParameter(&std::pair<T1, T2>::first),
@@ -62,14 +62,14 @@ template <typename... Ts>
 class JsonSerialiser<std::tuple<Ts...>> : public JsonClassSerialiser<std::tuple<Ts...>, Ts...> {
 public:
     // FIXME use "HelperType" when it supports templated types
-    static void SetupHelper()
+    static void Configure()
     {
-        SetupHelperInternal(std::make_index_sequence<sizeof...(Ts)>());
+        ConfigureInternal(std::make_index_sequence<sizeof...(Ts)>());
     }
 
 private:
     template <std::size_t... Indexes>
-    static void SetupHelperInternal(std::index_sequence<Indexes...>)
+    static void ConfigureInternal(std::index_sequence<Indexes...>)
     {
         JsonSerialiser::RegisterConstruction(JsonSerialiser::CreateParameter([](const std::tuple<Ts...>& t)
         {

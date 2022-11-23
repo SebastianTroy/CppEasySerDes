@@ -145,7 +145,7 @@ struct TrivialType {
 
 template<>
 struct esd::JsonSerialiser<TrivialTestType> : public esd::JsonClassSerialiser<TrivialTestType, int, std::vector<int>, std::string> {
-    static void SetupHelper()
+    static void Configure()
     {
         // Here we pass in static member object pointers that can be applied to an instance of the type later
         RegisterConstruction(CreateParameter(&TrivialTestType::a_), 
@@ -192,7 +192,7 @@ private:
 template<>
 class esd::JsonSerialiser<ContrivedType> : public esd::JsonClassSerialiser<ContrivedType, int> {
 public:
-    static void SetupHelper()
+    static void Configure()
     {
         // b_ is private, so instead we use a static member function pointer to its getter
         RegisterConstruction(CreateParameter(&ContrivedType::GetB));
@@ -276,7 +276,7 @@ Next we need to implement their `JsonSerialiser`s. Note that they are implemente
 template<>
 class esd::JsonSerialiser<GrandChildType> : public esd::JsonPolymorphicClassSerialiser<GrandChildType, int> {
 public:
-    static void SetupHelper()
+    static void Configure()
     {
         RegisterConstruction(CreateParameter(&GrandChildType::i_));
     }
@@ -285,7 +285,7 @@ public:
 template<>
 class esd::JsonSerialiser<ChildTypeA> : public esd::JsonPolymorphicClassSerialiser<ChildTypeA, bool> {
 public:
-    static void SetupHelper()
+    static void Configure()
     {
         RegisterConstruction(CreateParameter(&ChildTypeA::GetB));
         RegisterChildTypes<GrandChildType>();
@@ -295,7 +295,7 @@ public:
 template<>
 class esd::JsonSerialiser<ChildTypeB> : public esd::JsonPolymorphicClassSerialiser<ChildTypeB, std::string> {
 public:
-    static void SetupHelper()
+    static void Configure()
     {
         RegisterConstruction(CreateParameter(&ChildTypeB::GetS));
     }
@@ -304,7 +304,7 @@ public:
 template<>
 class esd::JsonSerialiser<ParentType> : public esd::JsonPolymorphicClassSerialiser<ParentType, int> {
 public:
-    static void SetupHelper()
+    static void Configure()
     {
         RegisterConstruction(CreateParameter(&ParentType::a_));
         RegisterChildTypes<ChildTypeA, ChildTypeB>();
@@ -458,12 +458,12 @@ public:
 ----------------------------
 
 To make use of the `JsonClassSerialiser` you publically extend it when you are implementing an esd::JsonSerialiser.
-It already defines the Validate, Serialise and Deserialise functions for you, so all that remains is to define a static SetupHelper function as below.
+It already defines the Validate, Serialise and Deserialise functions for you, so all that remains is to define a static Configure function as below.
 ````C++
 template<>
 class esd::JsonSerialiser<T> : public esd::JsonClassSerialiser<T, ConstructionParameterTypes...> {
 public:
-    static void SetupHelper();
+    static void Configure();
 };
 ````
 #### esd::JsonClassSerialiser::RegisterConstruction
@@ -475,7 +475,7 @@ This **MUST** be called if your type is not default constructable, or if your ty
 The actual type of `Parameter` is private in this context, so a Parameter has to be created in place within the call to `RegisterConstruction`.
 
 ````C++
-static void SetupHelper()
+static void Configure()
 {
     RegisterConstruction(CreateParameter(...), ...);
 }
@@ -523,7 +523,7 @@ public:
 };
 ````
 ````C++
-static void SetupHelper()
+static void Configure()
 {
     RegisterInitialisation(&T::Initialise, CreateParameter(...), CreateParameter(...));
 }
@@ -743,12 +743,12 @@ void DefinePostDeserialiseAction(std::function<void (const nlohmann::json&, T&)>
 ---------------------------------------
 
 To make use of the `JsonPolymorphicClassSerialiser` you publically extend it when you are implementing an esd::JsonSerialiser.
-It it an extension of `JsonClassSerialiser` so it already defines the Validate, Serialise and Deserialise functions for you, and you implement the same static SetupHelper function as below.
+It it an extension of `JsonClassSerialiser` so it already defines the Validate, Serialise and Deserialise functions for you, and you implement the same static Configure function as below.
 ````C++
 template<>
 class esd::JsonSerialiser<T> : public esd::JsonPolymorphicClassSerialiser<T, ConstructionParameterTypes...> {
 public:
-    static void SetupHelper();
+    static void Configure();
 };
 ````
 
@@ -758,7 +758,7 @@ public:
 The only difference between using this type and `esd::JsonClassSerialiser` is that you need to specify the child types of your type.
 
 ````C++
-// Call this in `SetupHelper`, it is not a member of `HelperType`
+// Call this in `Configure`, it is not a member of `HelperType`
 RegisterChildTypes<ChildT1, CHildT2, CHildT3, ...>();
 ````
 
@@ -778,13 +778,13 @@ Each child type must also have a defined `esd::JsonSerialiser<ChildT>` that exte
  [ ] Create an `esd` directory and move all headers into it, renaming them to remove the `EasySerDes` prefix (except EasySerDes.h!)
  [ ] Remove Json prefixes from type and header names
  [ ] Change type names to match header names
- [ ] Refactor `void SetupHelper()` to `void Configure()`
+ [x] Refactor `void SetupHelper()` to `void Configure()`
  [ ] Refactor `RegisterConstruction` to `SetConstructor` so it is clear it should only be called once
  [ ] Refactor `RegisterInitialisation` to `AddInitialisationCall` so it is clear it can be called multiple times
  [ ] Refactor `RegisterChildTypes` to `SetChildTypes` so it is clear it should be called only once
  [ ] Add to website and link to website in README
  [ ] In the "Adding It To Your Own Project" section, link to one of my projects that uses this library as a complete example
- [ ] MAYBE POD helper (that would implement the `SetupHelper` function automatically)
+ [ ] MAYBE POD helper (that would implement the `Configure` function automatically)
  [ ] MAYBE Enum helper to allow setting of stricter validation of values
  [ ] MAYBE seperate the `nlohmann::json` requirement from the API, would need an API with some std::library default impl, optional nlohmann impl, and ability for end user to create their own to easily serialise to any format and back, would need to pass as a template param, as it dictates the return type and parameter types of various functions...
  [ ] create an EnumHelper that allows the user to set a max and min value, or set allowed values, or set valid flags etc

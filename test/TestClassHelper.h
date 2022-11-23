@@ -133,7 +133,7 @@ namespace esd {
 template<>
 class JsonSerialiser<TrivialTestType> : public JsonClassSerialiser<TrivialTestType, int, std::vector<int>, std::string> {
 public:
-    static void SetupHelper()
+    static void Configure()
     {
         RegisterConstruction(CreateParameter(&TrivialTestType::a_),
                              CreateParameter(&TrivialTestType::b_),
@@ -144,7 +144,7 @@ public:
 template<>
 class JsonSerialiser<NonTrivialTestType> : public JsonClassSerialiser<NonTrivialTestType, int> {
 public:
-    static void SetupHelper()
+    static void Configure()
     {
         RegisterConstruction(CreateParameter(&NonTrivialTestType::GetA));
         RegisterVariable(&NonTrivialTestType::b_);
@@ -154,7 +154,7 @@ public:
 template<>
 class JsonSerialiser<InitialisedTestType> : public JsonClassSerialiser<InitialisedTestType> {
 public:
-    static void SetupHelper()
+    static void Configure()
     {
         RegisterInitialisation(&InitialisedTestType::Initialise,
                                CreateParameter(&InitialisedTestType::GetA),
@@ -166,7 +166,7 @@ public:
 template<>
 class JsonSerialiser<NestedTestType> : public JsonClassSerialiser<NestedTestType, NonTrivialTestType> {
 public:
-    static void SetupHelper()
+    static void Configure()
     {
         RegisterConstruction(CreateParameter(&NestedTestType::GetA));
         RegisterVariable(&NestedTestType::b_);
