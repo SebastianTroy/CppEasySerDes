@@ -135,9 +135,9 @@ class JsonSerialiser<TrivialTestType> : public JsonClassSerialiser<TrivialTestTy
 public:
     static void Configure()
     {
-        RegisterConstruction(CreateParameter(&TrivialTestType::a_),
-                             CreateParameter(&TrivialTestType::b_),
-                             CreateParameter(&TrivialTestType::c_));
+        SetConstruction(CreateParameter(&TrivialTestType::a_),
+                        CreateParameter(&TrivialTestType::b_),
+                        CreateParameter(&TrivialTestType::c_));
     }
 };
 
@@ -146,7 +146,7 @@ class JsonSerialiser<NonTrivialTestType> : public JsonClassSerialiser<NonTrivial
 public:
     static void Configure()
     {
-        RegisterConstruction(CreateParameter(&NonTrivialTestType::GetA));
+        SetConstruction(CreateParameter(&NonTrivialTestType::GetA));
         RegisterVariable(&NonTrivialTestType::b_);
     }
 };
@@ -168,7 +168,7 @@ class JsonSerialiser<NestedTestType> : public JsonClassSerialiser<NestedTestType
 public:
     static void Configure()
     {
-        RegisterConstruction(CreateParameter(&NestedTestType::GetA));
+        SetConstruction(CreateParameter(&NestedTestType::GetA));
         RegisterVariable(&NestedTestType::b_);
     }
 };

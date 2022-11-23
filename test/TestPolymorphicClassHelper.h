@@ -118,8 +118,8 @@ class esd::JsonSerialiser<GrandChildTestType> : public esd::JsonPolymorphicClass
 public:
     static void Configure()
     {
-        RegisterConstruction(CreateParameter(&GrandChildTestType::d_),
-                             CreateParameter(&GrandChildTestType::b_));
+        SetConstruction(CreateParameter(&GrandChildTestType::d_),
+                        CreateParameter(&GrandChildTestType::b_));
     }
 };
 
@@ -128,8 +128,8 @@ class esd::JsonSerialiser<ChildTestTypeB> : public esd::JsonPolymorphicClassSeri
 public:
     static void Configure()
     {
-        RegisterConstruction(CreateParameter(&ChildTestTypeB::d_),
-                             CreateParameter(&ChildTestTypeB::b_));
+        SetConstruction(CreateParameter(&ChildTestTypeB::d_),
+                        CreateParameter(&ChildTestTypeB::b_));
         RegisterChildTypes<GrandChildTestType>();
     }
 };
@@ -139,7 +139,7 @@ class esd::JsonSerialiser<ChildTestTypeA> : public esd::JsonPolymorphicClassSeri
 public:
     static void Configure()
     {
-        RegisterConstruction(CreateParameter(&ChildTestTypeA::d_));
+        SetConstruction(CreateParameter(&ChildTestTypeA::d_));
     }
 };
 
@@ -148,7 +148,7 @@ class esd::JsonSerialiser<BaseTestType> : public esd::JsonPolymorphicClassSerial
 public:
     static void Configure()
     {
-        RegisterConstruction(CreateParameter(&BaseTestType::d_));
+        SetConstruction(CreateParameter(&BaseTestType::d_));
 
         RegisterChildTypes<ChildTestTypeA, ChildTestTypeB>();
     }

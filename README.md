@@ -19,7 +19,7 @@ A library for easy conversion of C++ types to/from JSON, allowing for a concise 
    - [esd namespace Functions](#esd-namespace-Functions)
    - [esd::JsonSerialiser](#esdJsonSerialiser)
    - [esd::JsonClassSerialiser](#esdJsonClassSerialiser)
-     - [RegisterConstruction](#esdJsonClassSerialiserRegisterConstruction)
+     - [SetConstruction](#esdJsonClassSerialiserSetConstruction)
      - [RegisterInitialisation](#esdJsonClassSerialiserRegisterInitialisation)
      - [CreateParameter](#esdJsonClassSerialiserCreateParameter)
      - [RegisterVariable](#esdJsonClassSerialiserRegisterVariable)
@@ -148,9 +148,9 @@ struct esd::JsonSerialiser<TrivialTestType> : public esd::JsonClassSerialiser<Tr
     static void Configure()
     {
         // Here we pass in static member object pointers that can be applied to an instance of the type later
-        RegisterConstruction(CreateParameter(&TrivialTestType::a_), 
-                             CreateParameter(&TrivialTestType::b_, "B"),
-                             CreateParameter(&TrivialTestType::c_, std::nullopt, [](const std::string&) -> bool { /* custom validation */ }));
+        SetConstruction(CreateParameter(&TrivialTestType::a_), 
+                        CreateParameter(&TrivialTestType::b_, "B"),
+                        CreateParameter(&TrivialTestType::c_, std::nullopt, [](const std::string&) -> bool { /* custom validation */ }));
     }
 };
 ````
@@ -195,7 +195,7 @@ public:
     static void Configure()
     {
         // b_ is private, so instead we use a static member function pointer to its getter
-        RegisterConstruction(CreateParameter(&ContrivedType::GetB));
+        SetConstruction(CreateParameter(&ContrivedType::GetB));
 
         // First we specify what the initialisation call is, then we specify the parameters the same way we do for the constructor
         RegisterInitialisation(&ContrivedType::Initialise, CreateParameter(&ContrivedType::a_), CreateParameter(&ContrivedType::GetC));
@@ -278,7 +278,7 @@ class esd::JsonSerialiser<GrandChildType> : public esd::JsonPolymorphicClassSeri
 public:
     static void Configure()
     {
-        RegisterConstruction(CreateParameter(&GrandChildType::i_));
+        SetConstruction(CreateParameter(&GrandChildType::i_));
     }
 };
 
@@ -287,7 +287,7 @@ class esd::JsonSerialiser<ChildTypeA> : public esd::JsonPolymorphicClassSerialis
 public:
     static void Configure()
     {
-        RegisterConstruction(CreateParameter(&ChildTypeA::GetB));
+        SetConstruction(CreateParameter(&ChildTypeA::GetB));
         RegisterChildTypes<GrandChildType>();
     }
 };
@@ -297,7 +297,7 @@ class esd::JsonSerialiser<ChildTypeB> : public esd::JsonPolymorphicClassSerialis
 public:
     static void Configure()
     {
-        RegisterConstruction(CreateParameter(&ChildTypeB::GetS));
+        SetConstruction(CreateParameter(&ChildTypeB::GetS));
     }
 };
 
@@ -306,7 +306,7 @@ class esd::JsonSerialiser<ParentType> : public esd::JsonPolymorphicClassSerialis
 public:
     static void Configure()
     {
-        RegisterConstruction(CreateParameter(&ParentType::a_));
+        SetConstruction(CreateParameter(&ParentType::a_));
         RegisterChildTypes<ChildTypeA, ChildTypeB>();
 
         // As ParentType is default constructable, We could also have specified 
@@ -466,18 +466,18 @@ public:
     static void Configure();
 };
 ````
-#### esd::JsonClassSerialiser::RegisterConstruction
+#### esd::JsonClassSerialiser::SetConstruction
 ---------------------------------------------------
 
 This **MUST** be called if your type is not default constructable, or if your type is default constructable and has an alternative constructor that you would like to use.
 **Repeated calls to this function simply overwrite previous calls.**
-`RegisterConstruction` takes a series of `Parameter`s which are created by the helper.
-The actual type of `Parameter` is private in this context, so a Parameter has to be created in place within the call to `RegisterConstruction`.
+`SetConstruction` takes a series of `Parameter`s which are created by the helper.
+The actual type of `Parameter` is private in this context, so a Parameter has to be created in place within the call to `SetConstruction`.
 
 ````C++
 static void Configure()
 {
-    RegisterConstruction(CreateParameter(...), ...);
+    SetConstruction(CreateParameter(...), ...);
 }
 ````
 `CreateParameter` is a template, and while the type will be **automatically deduced**, it is important that the deduced types match the target types construction signature, ignoring constness, references and r values e.t.c.
@@ -487,7 +487,7 @@ T(int a, const std::string& b);
 ````
 The the parameters must be equivalent to the follwoing
 ````C++
-RegisterConstruction(CreateParameter<int>(...), CreateParameter<std::string>(...));
+SetConstruction(CreateParameter<int>(...), CreateParameter<std::string>(...));
 ````
 While each parameter may have its own individual validation, in some cases it may be desirable to check the validity of the parameters relative to each other,
 this can be important to prevent program crashes when constructing a type with invalid arguments that individually evaluated as valid values.
@@ -501,9 +501,9 @@ bool ValidateFunc(int i, const std::string& s)
 ````
 ````C++
 // Defer to an existing function
-RegisterConstruction(&ValidateFunc, CreateParameter<int>(...), CreateParameter<std::string>(...));
+SetConstruction(&ValidateFunc, CreateParameter<int>(...), CreateParameter<std::string>(...));
 // OR use a lambda
-RegisterConstruction([](int i, const std::string& s){ return i < s.size(); }, CreateParameter<int>(...), CreateParameter<std::string>(...));
+SetConstruction([](int i, const std::string& s){ return i < s.size(); }, CreateParameter<int>(...), CreateParameter<std::string>(...));
 ````
 
 [Back to Index](#Table-of-Contents)
@@ -555,7 +555,7 @@ RegisterInitialisation([](bool b, const std::string& s){ return b == s.empty(); 
 #### esd::JsonClassSerialiser::CreateParameter
 ----------------------------------------------
 
-This function is used with both `RegisterConstruction` and `RegisterInitialisation`, as both require `0` or more `CreateParameter` return types as input.
+This function is used with both `SetConstruction` and `RegisterInitialisation`, as both require `0` or more `CreateParameter` return types as input.
 The role of this function is to tell the library how to get the values needed to construct our type and call any initialise functions.
 
 The `getter` parameter of the first overload can be:
@@ -779,7 +779,7 @@ Each child type must also have a defined `esd::JsonSerialiser<ChildT>` that exte
  [ ] Remove Json prefixes from type and header names
  [ ] Change type names to match header names
  [x] Refactor `void SetupHelper()` to `void Configure()`
- [ ] Refactor `RegisterConstruction` to `SetConstructor` so it is clear it should only be called once
+ [x] Refactor `RegisterConstruction` to `SetConstruction` so it is clear it should only be called once
  [ ] Refactor `RegisterInitialisation` to `AddInitialisationCall` so it is clear it can be called multiple times
  [ ] Refactor `RegisterChildTypes` to `SetChildTypes` so it is clear it should be called only once
  [ ] Add to website and link to website in README

@@ -90,8 +90,8 @@ requires std::is_class_v<T> && (std::is_default_constructible_v<T> || std::const
 class JsonClassSerialiser {
 public:
     ///
-    /// RegisterConstruction
-    /// --------------------
+    /// SetConstruction
+    /// ---------------
     ///
     /// The intent here was to allow the user to easily and clearly state how
     /// their type should be constructed.
@@ -106,8 +106,8 @@ public:
     /// Instead I have opted to combine the steps of registering the values, and
     /// defining the construction. Parameter<> is a templated type, and is not
     /// visible to the user, meaning that they have to create a Parameter using
-    /// this API, and they have to do it inside a call to RegisterConstruction
-    /// (or RegisterInitialisation).
+    /// this API, and they have to do it inside a call to SetConstruction (or
+    /// RegisterInitialisation).
     ///
 
     /**
@@ -115,9 +115,9 @@ public:
      * by calling CreateParameter(...). This will either call a constructor, or
      * brace initialise the type.
      */
-    static void RegisterConstruction(Parameter<std::remove_cvref_t<ConstructionArgs>>... params)
+    static void SetConstruction(Parameter<std::remove_cvref_t<ConstructionArgs>>... params)
     {
-        helper_.RegisterConstruction(std::move(params)...);
+        helper_.SetConstruction(std::move(params)...);
     }
 
     /**
@@ -138,9 +138,9 @@ public:
      */
     template <typename Validator>
     requires std::is_invocable_r_v<bool, Validator, const std::remove_cvref_t<ConstructionArgs>&...>
-    static void RegisterConstruction(Parameter<std::remove_cvref_t<ConstructionArgs>>... params, Validator parameterValidator)
+    static void SetConstruction(Parameter<std::remove_cvref_t<ConstructionArgs>>... params, Validator parameterValidator)
     {
-        helper_.RegisterConstruction(std::move(params)..., std::forward<Validator>(parameterValidator));
+        helper_.SetConstruction(std::move(params)..., std::forward<Validator>(parameterValidator));
     }
 
     /**
@@ -155,9 +155,9 @@ public:
      */
     template <typename... FactoryArgs, typename Factory>
     requires std::is_invocable_r_v<T, Factory, FactoryArgs...>
-    static void RegisterConstruction(Factory factory, Parameter<std::remove_cvref_t<FactoryArgs>>... params)
+    static void SetConstruction(Factory factory, Parameter<std::remove_cvref_t<FactoryArgs>>... params)
     {
-        helper_RegisterConstruction(std::forward<Factory>(factory), std::move(params)...);
+        helper_SetConstruction(std::forward<Factory>(factory), std::move(params)...);
     }
 
     /**
@@ -182,9 +182,9 @@ public:
     template <typename... FactoryArgs, typename Factory, typename Validator>
     requires std::is_invocable_r_v<bool, Validator, const FactoryArgs&...>
           && std::is_invocable_r_v<T, Factory, FactoryArgs...>
-    static void RegisterConstruction(Factory factory, Parameter<std::remove_cvref_t<FactoryArgs>>... params, Validator parameterValidator)
+    static void SetConstruction(Factory factory, Parameter<std::remove_cvref_t<FactoryArgs>>... params, Validator parameterValidator)
     {
-        helper_.RegisterConstruction(std::forward<Factory>(factory), std::move(params)..., std::forward<Validator>(parameterValidator));
+        helper_.SetConstruction(std::forward<Factory>(factory), std::move(params)..., std::forward<Validator>(parameterValidator));
     }
 
     ///
@@ -206,7 +206,7 @@ public:
     /// defining the function calls. Parameter<> is a templated type, and is not
     /// visible to the user, meaning that they have to create a Parameter using
     /// this API, and they have to do it inside a call to RegisterInitialisation
-    /// (or RegisterConstruction).
+    /// (or SetConstruction).
     ///
 
     /**
@@ -262,7 +262,7 @@ public:
     /// values need to be stored for a given type, and how to use them during
     /// deserialisation. Ideally in a way that preserves type information so
     /// that users don't need to explicitly define the template parameters for
-    /// their calls to RegisterConstruction and RegisterInitialisation.
+    /// their calls to SetConstruction and RegisterInitialisation.
     ///
     /// To achieve this CreateParameter is similar to RegisterVariable, except
     /// it only needs to be told how to get the value during serialisation, this
@@ -272,7 +272,7 @@ public:
     ///
     /// It is also paired with the Parameter<> struct, which simply contains
     /// the key for the registered value, and preserves the type of the value so
-    /// calls to RegisterConstruction and Register initialisation can be type
+    /// calls to SetConstruction and Register initialisation can be type
     /// checked, and simple, i.e. they basically take a sequence of strings
     /// instructing them on which values to use for their calls.
     ///
@@ -341,8 +341,8 @@ public:
     /// initialisation.
     ///
     /// Technically POD type structs can be supported entirely via this
-    /// function, without ever calling RegisterConstruction. (though there are
-    /// benefits to calling RegisterConstruction instead).
+    /// function, without ever calling SetConstruction. (though there are
+    /// benefits to calling SetConstruction instead).
     ///
     /// Despite this being the first piece of the puzzle used to create this
     /// library in the first place, its usage should actually be quite rare.
@@ -599,7 +599,7 @@ public:
         , postSerialisationAction_([](const T&, nlohmann::json&) -> void { /* do nothing by default */})
         , postDeserialisationAction_([](const nlohmann::json&, T&) -> void { /* do nothing by default */})
     {
-        // Removes the need for the user to call an empty RegisterConstruction()
+        // Removes the need for the user to call an empty SetConstruction()
         // in cases where the type is default constructabe and the state is
         // managed by other means
         if constexpr(std::is_default_constructible_v<T>) {
@@ -692,7 +692,7 @@ public:
         return valid;
     }
 
-    void RegisterConstruction(Parameter<std::remove_cvref_t<ConstructionArgs>>... params)
+    void SetConstruction(Parameter<std::remove_cvref_t<ConstructionArgs>>... params)
     {
         constructor_ = [=](const nlohmann::json& serialised) -> T
         {
@@ -704,19 +704,19 @@ public:
 
     template <typename Validator>
     requires std::is_invocable_r_v<bool, Validator, const std::remove_cvref_t<ConstructionArgs>&...>
-    void RegisterConstruction(Parameter<std::remove_cvref_t<ConstructionArgs>>... params, Validator parameterValidator)
+    void SetConstruction(Parameter<std::remove_cvref_t<ConstructionArgs>>... params, Validator parameterValidator)
     {
         interdependantVariablesValidators_.push_back([=, validator = std::forward<Validator>(parameterValidator)](const nlohmann::json& serialised) -> bool
         {
             return std::invoke(validator, (esd::DeserialiseWithoutChecks<std::remove_cvref_t<ConstructionArgs>>(serialised.at(params.parameterKey_)))...);
         });
 
-        RegisterConstruction(std::move(params)...);
+        SetConstruction(std::move(params)...);
     }
 
     template <typename... FactoryArgs, typename Factory>
     requires std::is_invocable_r_v<T, Factory, FactoryArgs...>
-    void RegisterConstruction(Parameter<std::remove_cvref_t<FactoryArgs>>... params, Factory factory)
+    void SetConstruction(Parameter<std::remove_cvref_t<FactoryArgs>>... params, Factory factory)
     {
         constructor_ = [=, factory = std::forward<Factory>(factory)](const nlohmann::json& serialised) -> T
         {
@@ -729,14 +729,14 @@ public:
     template <typename... FactoryArgs, typename Factory, typename Validator>
     requires std::is_invocable_r_v<bool, Validator, const FactoryArgs&...>
           && std::is_invocable_r_v<T, Factory, FactoryArgs...>
-    void RegisterConstruction(Parameter<std::remove_cvref_t<FactoryArgs>>... params, Factory factory, Validator parameterValidator)
+    void SetConstruction(Parameter<std::remove_cvref_t<FactoryArgs>>... params, Factory factory, Validator parameterValidator)
     {
         interdependantVariablesValidators_.push_back([=, validator = std::forward<Validator>(parameterValidator)](const nlohmann::json& serialised) -> bool
         {
             return std::invoke(validator, (esd::DeserialiseWithoutChecks<std::remove_cvref_t<FactoryArgs>>(serialised.at(params.parameterKey_)))...);
         });
 
-        RegisterConstruction(std::forward<Factory>(factory), std::move(params)...);
+        SetConstruction(std::forward<Factory>(factory), std::move(params)...);
     }
 
     template <typename MemberFunctionPointer, typename... Ts>

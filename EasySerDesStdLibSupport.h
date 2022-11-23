@@ -53,8 +53,8 @@ public:
     static void Configure()
     {
         // FIXME comment on this name lookup failure in the documentation (appears to only affect support for templated types)
-        JsonSerialiser::RegisterConstruction(JsonSerialiser::CreateParameter(&std::pair<T1, T2>::first),
-                                             JsonSerialiser::CreateParameter(&std::pair<T1, T2>::second));
+        JsonSerialiser::SetConstruction(JsonSerialiser::CreateParameter(&std::pair<T1, T2>::first),
+                                        JsonSerialiser::CreateParameter(&std::pair<T1, T2>::second));
     }
 };
 
@@ -71,7 +71,7 @@ private:
     template <std::size_t... Indexes>
     static void ConfigureInternal(std::index_sequence<Indexes...>)
     {
-        JsonSerialiser::RegisterConstruction(JsonSerialiser::CreateParameter([](const std::tuple<Ts...>& t)
+        JsonSerialiser::SetConstruction(JsonSerialiser::CreateParameter([](const std::tuple<Ts...>& t)
         {
             return std::get<Indexes>(t);
         }, "T" + std::to_string(Indexes)) ...);
