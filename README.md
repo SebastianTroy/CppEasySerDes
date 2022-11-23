@@ -26,7 +26,7 @@ A library for easy conversion of C++ types to/from JSON, allowing for a concise 
      - [DefinePostSerialiseAction](#esdJsonClassSerialiserDefinePostSerialiseAction)
      - [DefinePostDeserialiseAction](#esdJsonClassSerialiserDefinePostDeserialiseAction)
    - [esd::JsonPolymorphicClassSerialiser](#esdJsonPolymorphicClassSerialiser)
-     - [RegisterChildTypes](#esdJsonPolymorphicClassSerialiserRegisterChildTypes)
+     - [SetChildTypes](#esdJsonPolymorphicClassSerialiserSetChildTypes)
  - [TODO](#TODO)
 
 ## Disclaimer
@@ -288,7 +288,7 @@ public:
     static void Configure()
     {
         SetConstruction(CreateParameter(&ChildTypeA::GetB));
-        RegisterChildTypes<GrandChildType>();
+        SetChildTypes<GrandChildType>();
     }
 };
 
@@ -307,7 +307,7 @@ public:
     static void Configure()
     {
         SetConstruction(CreateParameter(&ParentType::a_));
-        RegisterChildTypes<ChildTypeA, ChildTypeB>();
+        SetChildTypes<ChildTypeA, ChildTypeB>();
 
         // As ParentType is default constructable, We could also have specified 
         // no construction params, not registered the construction and instead
@@ -752,14 +752,14 @@ public:
 };
 ````
 
-#### esd::JsonPolymorphicClassSerialiser::RegisterChildTypes
+#### esd::JsonPolymorphicClassSerialiser::SetChildTypes
 ------------------------------------------------------------
 
 The only difference between using this type and `esd::JsonClassSerialiser` is that you need to specify the child types of your type.
 
 ````C++
 // Call this in `Configure`, it is not a member of `HelperType`
-RegisterChildTypes<ChildT1, CHildT2, CHildT3, ...>();
+SetChildTypes<ChildT1, ChildT2, ChildT3, ...>();
 ````
 
 Each child type must also have a defined `esd::JsonSerialiser<ChildT>` that extends `esd::JsonPolymorphicClassSerialiser`. The requirement to specify the child types means the definitions of each serialiser must be defined in reverse heirarchical order, i.e. from grandest child type first, to base type last.
@@ -781,7 +781,7 @@ Each child type must also have a defined `esd::JsonSerialiser<ChildT>` that exte
  [x] Refactor `void SetupHelper()` to `void Configure()`
  [x] Refactor `RegisterConstruction` to `SetConstruction` so it is clear it should only be called once
  [x] Refactor `RegisterInitialisation` to `AddInitialisationCall` so it is clear it can be called multiple times
- [ ] Refactor `RegisterChildTypes` to `SetChildTypes` so it is clear it should be called only once
+ [x] Refactor `RegisterChildTypes` to `SetChildTypes` so it is clear it should be called only once
  [ ] Add to website and link to website in README
  [ ] In the "Adding It To Your Own Project" section, link to one of my projects that uses this library as a complete example
  [ ] MAYBE POD helper (that would implement the `Configure` function automatically)

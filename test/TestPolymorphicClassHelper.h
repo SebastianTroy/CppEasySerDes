@@ -130,7 +130,7 @@ public:
     {
         SetConstruction(CreateParameter(&ChildTestTypeB::d_),
                         CreateParameter(&ChildTestTypeB::b_));
-        RegisterChildTypes<GrandChildTestType>();
+        SetChildTypes<GrandChildTestType>();
     }
 };
 
@@ -150,7 +150,7 @@ public:
     {
         SetConstruction(CreateParameter(&BaseTestType::d_));
 
-        RegisterChildTypes<ChildTestTypeA, ChildTestTypeB>();
+        SetChildTypes<ChildTestTypeA, ChildTestTypeB>();
     }
 };
 

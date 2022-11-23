@@ -132,7 +132,7 @@ public:
           && (... && NotDerivedFromAnyOf<ChildTypes, ChildTypes...>)
           && (... && TypeSupportedByEasySerDes<ChildTypes>)
           && (... && IsDerivedFromSpecialisationOf<JsonSerialiser<ChildTypes>, esd::JsonPolymorphicClassSerialiser>)
-    static void RegisterChildTypes()
+    static void SetChildTypes()
     {
         childHelpers_.clear();
         (..., RegisterChild<ChildTypes>());
