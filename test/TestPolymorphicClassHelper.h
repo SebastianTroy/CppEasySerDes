@@ -116,20 +116,20 @@ std::ostream& operator<<(std::ostream& ostr, const GrandChildTestType& value)
 template<>
 class esd::JsonSerialiser<GrandChildTestType> : public esd::JsonPolymorphicClassSerialiser<GrandChildTestType, double, bool> {
 public:
-    static void SetupHelper(HelperType& h)
+    static void SetupHelper()
     {
-        h.RegisterConstruction(h.CreateParameter(&GrandChildTestType::d_),
-                               h.CreateParameter(&GrandChildTestType::b_));
+        RegisterConstruction(CreateParameter(&GrandChildTestType::d_),
+                             CreateParameter(&GrandChildTestType::b_));
     }
 };
 
 template<>
 class esd::JsonSerialiser<ChildTestTypeB> : public esd::JsonPolymorphicClassSerialiser<ChildTestTypeB, double, bool> {
 public:
-    static void SetupHelper(HelperType& h)
+    static void SetupHelper()
     {
-        h.RegisterConstruction(h.CreateParameter(&ChildTestTypeB::d_),
-                               h.CreateParameter(&ChildTestTypeB::b_));
+        RegisterConstruction(CreateParameter(&ChildTestTypeB::d_),
+                             CreateParameter(&ChildTestTypeB::b_));
         RegisterChildTypes<GrandChildTestType>();
     }
 };
@@ -137,18 +137,18 @@ public:
 template<>
 class esd::JsonSerialiser<ChildTestTypeA> : public esd::JsonPolymorphicClassSerialiser<ChildTestTypeA, double> {
 public:
-    static void SetupHelper(HelperType& h)
+    static void SetupHelper()
     {
-        h.RegisterConstruction(h.CreateParameter(&ChildTestTypeA::d_));
+        RegisterConstruction(CreateParameter(&ChildTestTypeA::d_));
     }
 };
 
 template<>
 class esd::JsonSerialiser<BaseTestType> : public esd::JsonPolymorphicClassSerialiser<BaseTestType, double> {
 public:
-    static void SetupHelper(HelperType& h)
+    static void SetupHelper()
     {
-        h.RegisterConstruction(h.CreateParameter(&BaseTestType::d_));
+        RegisterConstruction(CreateParameter(&BaseTestType::d_));
 
         RegisterChildTypes<ChildTestTypeA, ChildTestTypeB>();
     }

@@ -50,10 +50,11 @@ template <typename T1, typename T2>
 class JsonSerialiser<std::pair<T1, T2>> : public JsonClassSerialiser<std::pair<T1, T2>, T1, T2> {
 public:
     // FIXME use "HelperType" when it supports templated types
-    static void SetupHelper(InternalHelper<std::pair<T1, T2>, T1, T2>& h)
+    static void SetupHelper()
     {
-        h.RegisterConstruction(h.CreateParameter(&std::pair<T1, T2>::first),
-                               h.CreateParameter(&std::pair<T1, T2>::second));
+        // FIXME comment on this name lookup failure in the documentation (appears to only affect support for templated types)
+        JsonSerialiser::RegisterConstruction(JsonSerialiser::CreateParameter(&std::pair<T1, T2>::first),
+                                             JsonSerialiser::CreateParameter(&std::pair<T1, T2>::second));
     }
 };
 
@@ -61,16 +62,16 @@ template <typename... Ts>
 class JsonSerialiser<std::tuple<Ts...>> : public JsonClassSerialiser<std::tuple<Ts...>, Ts...> {
 public:
     // FIXME use "HelperType" when it supports templated types
-    static void SetupHelper(InternalHelper<std::tuple<Ts...>, Ts...>& h)
+    static void SetupHelper()
     {
-        SetupHelperInternal(h, std::make_index_sequence<sizeof...(Ts)>());
+        SetupHelperInternal(std::make_index_sequence<sizeof...(Ts)>());
     }
 
 private:
     template <std::size_t... Indexes>
-    static void SetupHelperInternal(InternalHelper<std::tuple<Ts...>, Ts...>& h, std::index_sequence<Indexes...>)
+    static void SetupHelperInternal(std::index_sequence<Indexes...>)
     {
-        h.RegisterConstruction(h.CreateParameter([](const std::tuple<Ts...>& t)
+        JsonSerialiser::RegisterConstruction(JsonSerialiser::CreateParameter([](const std::tuple<Ts...>& t)
         {
             return std::get<Indexes>(t);
         }, "T" + std::to_string(Indexes)) ...);

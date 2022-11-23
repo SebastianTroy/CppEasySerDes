@@ -133,43 +133,43 @@ namespace esd {
 template<>
 class JsonSerialiser<TrivialTestType> : public JsonClassSerialiser<TrivialTestType, int, std::vector<int>, std::string> {
 public:
-    static void SetupHelper(HelperType& h)
+    static void SetupHelper()
     {
-        h.RegisterConstruction(h.CreateParameter(&TrivialTestType::a_),
-                               h.CreateParameter(&TrivialTestType::b_),
-                               h.CreateParameter(&TrivialTestType::c_));
+        RegisterConstruction(CreateParameter(&TrivialTestType::a_),
+                             CreateParameter(&TrivialTestType::b_),
+                             CreateParameter(&TrivialTestType::c_));
     }
 };
 
 template<>
 class JsonSerialiser<NonTrivialTestType> : public JsonClassSerialiser<NonTrivialTestType, int> {
 public:
-    static void SetupHelper(HelperType& h)
+    static void SetupHelper()
     {
-        h.RegisterConstruction(h.CreateParameter(&NonTrivialTestType::GetA));
-        h.RegisterVariable(&NonTrivialTestType::b_);
+        RegisterConstruction(CreateParameter(&NonTrivialTestType::GetA));
+        RegisterVariable(&NonTrivialTestType::b_);
     }
 };
 
 template<>
 class JsonSerialiser<InitialisedTestType> : public JsonClassSerialiser<InitialisedTestType> {
 public:
-    static void SetupHelper(HelperType& h)
+    static void SetupHelper()
     {
-        h.RegisterInitialisation(&InitialisedTestType::Initialise,
-                                 h.CreateParameter(&InitialisedTestType::GetA),
-                                 h.CreateParameter(&InitialisedTestType::GetB),
-                                 h.CreateParameter(&InitialisedTestType::GetC));
+        RegisterInitialisation(&InitialisedTestType::Initialise,
+                               CreateParameter(&InitialisedTestType::GetA),
+                               CreateParameter(&InitialisedTestType::GetB),
+                               CreateParameter(&InitialisedTestType::GetC));
     }
 };
 
 template<>
 class JsonSerialiser<NestedTestType> : public JsonClassSerialiser<NestedTestType, NonTrivialTestType> {
 public:
-    static void SetupHelper(HelperType& h)
+    static void SetupHelper()
     {
-        h.RegisterConstruction(h.CreateParameter(&NestedTestType::GetA));
-        h.RegisterVariable(&NestedTestType::b_);
+        RegisterConstruction(CreateParameter(&NestedTestType::GetA));
+        RegisterVariable(&NestedTestType::b_);
     }
 };
 

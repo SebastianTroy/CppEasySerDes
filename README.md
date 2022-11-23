@@ -145,12 +145,12 @@ struct TrivialType {
 
 template<>
 struct esd::JsonSerialiser<TrivialTestType> : public esd::JsonClassSerialiser<TrivialTestType, int, std::vector<int>, std::string> {
-    static void SetupHelper(HelperType& h)
+    static void SetupHelper()
     {
         // Here we pass in static member object pointers that can be applied to an instance of the type later
-        h.RegisterConstruction(h.CreateParameter(&TrivialTestType::a_), 
-                               h.CreateParameter(&TrivialTestType::b_, "B"),
-                               h.CreateParameter(&TrivialTestType::c_, std::nullopt, [](const std::string&) -> bool { /* custom validation */ }));
+        RegisterConstruction(CreateParameter(&TrivialTestType::a_), 
+                             CreateParameter(&TrivialTestType::b_, "B"),
+                             CreateParameter(&TrivialTestType::c_, std::nullopt, [](const std::string&) -> bool { /* custom validation */ }));
     }
 };
 ````
@@ -192,13 +192,13 @@ private:
 template<>
 class esd::JsonSerialiser<ContrivedType> : public esd::JsonClassSerialiser<ContrivedType, int> {
 public:
-    static void SetupHelper(HelperType& h)
+    static void SetupHelper()
     {
         // b_ is private, so instead we use a static member function pointer to its getter
-        h.RegisterConstruction(h.CreateParameter(&ContrivedType::GetB));
+        RegisterConstruction(CreateParameter(&ContrivedType::GetB));
 
         // First we specify what the initialisation call is, then we specify the parameters the same way we do for the constructor
-        h.RegisterInitialisation(&ContrivedType::Initialise, h.CreateParameter(&ContrivedType::a_), h.CreateParameter(&ContrivedType::GetC));
+        RegisterInitialisation(&ContrivedType::Initialise, CreateParameter(&ContrivedType::a_), CreateParameter(&ContrivedType::GetC));
 
         // Custom Getter or Setters can be provided for any variable or parameter, not only member pointers are supported
         auto customGetD = [](const ContrivedType& toSerialise) -> TrivialType
@@ -206,7 +206,7 @@ public:
                               return { toSerialise.GetD_A(), toSerialise.GetD_B(), toSerialise.GetD_C() };
                           };
         // Register a variable that isn't covered in construction or via an initialiser (note that CreateParameter calls aren't necessary or supported here)
-        h.RegisterVariable(std::move(customGetD), &ContrivedType::SetD);
+        RegisterVariable(std::move(customGetD), &ContrivedType::SetD);
 
         /*
          * The following two functions allow complete flexibility in how you serialise and 
@@ -215,9 +215,9 @@ public:
          */
 
         // Perhaps add something custom to the json, or do global housekeeping
-        h.DefinePostSerialiseAction([](const ContrivedType& input, nlohmann::json& output){ /* ... */ });
+        DefinePostSerialiseAction([](const ContrivedType& input, nlohmann::json& output){ /* ... */ });
         // Perhaps parse something custom from the json, or further validate the output, or do global housekeeping
-        h.DefinePostDeserialiseAction([](const nlohmann::json& input, ContrivedType& output){ /* ... */ });
+        DefinePostDeserialiseAction([](const nlohmann::json& input, ContrivedType& output){ /* ... */ });
     }
 };
 ````
@@ -276,18 +276,18 @@ Next we need to implement their `JsonSerialiser`s. Note that they are implemente
 template<>
 class esd::JsonSerialiser<GrandChildType> : public esd::JsonPolymorphicClassSerialiser<GrandChildType, int> {
 public:
-    static void SetupHelper(HelperType& h)
+    static void SetupHelper()
     {
-        h.RegisterConstruction(h.CreateParameter(&GrandChildType::i_));
+        RegisterConstruction(CreateParameter(&GrandChildType::i_));
     }
 };
 
 template<>
 class esd::JsonSerialiser<ChildTypeA> : public esd::JsonPolymorphicClassSerialiser<ChildTypeA, bool> {
 public:
-    static void SetupHelper(HelperType& h)
+    static void SetupHelper()
     {
-        h.RegisterConstruction(h.CreateParameter(&ChildTypeA::GetB));
+        RegisterConstruction(CreateParameter(&ChildTypeA::GetB));
         RegisterChildTypes<GrandChildType>();
     }
 };
@@ -295,23 +295,23 @@ public:
 template<>
 class esd::JsonSerialiser<ChildTypeB> : public esd::JsonPolymorphicClassSerialiser<ChildTypeB, std::string> {
 public:
-    static void SetupHelper(HelperType& h)
+    static void SetupHelper()
     {
-        h.RegisterConstruction(h.CreateParameter(&ChildTypeB::GetS));
+        RegisterConstruction(CreateParameter(&ChildTypeB::GetS));
     }
 };
 
 template<>
 class esd::JsonSerialiser<ParentType> : public esd::JsonPolymorphicClassSerialiser<ParentType, int> {
 public:
-    static void SetupHelper(HelperType& h)
+    static void SetupHelper()
     {
-        h.RegisterConstruction(h.CreateParameter(&ParentType::a_));
+        RegisterConstruction(CreateParameter(&ParentType::a_));
         RegisterChildTypes<ChildTypeA, ChildTypeB>();
 
         // As ParentType is default constructable, We could also have specified 
         // no construction params, not registered the construction and instead
-        // called `h.RegisterVariable(&ParentType::a_);`
+        // called `RegisterVariable(&ParentType::a_);`
     }
 };
 ````
@@ -463,7 +463,7 @@ It already defines the Validate, Serialise and Deserialise functions for you, so
 template<>
 class esd::JsonSerialiser<T> : public esd::JsonClassSerialiser<T, ConstructionParameterTypes...> {
 public:
-    static void SetupHelper(HelperType& h);
+    static void SetupHelper();
 };
 ````
 #### esd::JsonClassSerialiser::RegisterConstruction
@@ -475,9 +475,9 @@ This **MUST** be called if your type is not default constructable, or if your ty
 The actual type of `Parameter` is private in this context, so a Parameter has to be created in place within the call to `RegisterConstruction`.
 
 ````C++
-static void SetupHelper(HelperType& h)
+static void SetupHelper()
 {
-    h.RegisterConstruction(h.CreateParameter(...), ...);
+    RegisterConstruction(CreateParameter(...), ...);
 }
 ````
 `CreateParameter` is a template, and while the type will be **automatically deduced**, it is important that the deduced types match the target types construction signature, ignoring constness, references and r values e.t.c.
@@ -487,7 +487,7 @@ T(int a, const std::string& b);
 ````
 The the parameters must be equivalent to the follwoing
 ````C++
-h.RegisterConstruction(h.CreateParameter<int>(...), h.CreateParameter<std::string>(...));
+RegisterConstruction(CreateParameter<int>(...), CreateParameter<std::string>(...));
 ````
 While each parameter may have its own individual validation, in some cases it may be desirable to check the validity of the parameters relative to each other,
 this can be important to prevent program crashes when constructing a type with invalid arguments that individually evaluated as valid values.
@@ -501,9 +501,9 @@ bool ValidateFunc(int i, const std::string& s)
 ````
 ````C++
 // Defer to an existing function
-h.RegisterConstruction(&ValidateFunc, h.CreateParameter<int>(...), h.CreateParameter<std::string>(...));
+RegisterConstruction(&ValidateFunc, CreateParameter<int>(...), CreateParameter<std::string>(...));
 // OR use a lambda
-h.RegisterConstruction([](int i, const std::string& s){ return i < s.size(); }, h.CreateParameter<int>(...), h.CreateParameter<std::string>(...));
+RegisterConstruction([](int i, const std::string& s){ return i < s.size(); }, CreateParameter<int>(...), CreateParameter<std::string>(...));
 ````
 
 [Back to Index](#Table-of-Contents)
@@ -523,15 +523,15 @@ public:
 };
 ````
 ````C++
-static void SetupHelper(HelperType& h)
+static void SetupHelper()
 {
-    h.RegisterInitialisation(&T::Initialise, h.CreateParameter(...), h.CreateParameter(...));
+    RegisterInitialisation(&T::Initialise, CreateParameter(...), CreateParameter(...));
 }
 ````
 `CreateParameter` is a template, and while the type will be **automatically deduced**, it is important that the deduced types match the provided initialise function's signature, ignoring constness, references and r values e.t.c.
 In the above examplethe parameters must be equivalent to the follwoing
 ````C++
-h.RegisterInitialisation(h.CreateParameter<bool>(...), h.CreateParameter<std::string>(...));
+RegisterInitialisation(CreateParameter<bool>(...), CreateParameter<std::string>(...));
 ````
 While each parameter may have its own individual validation, in some cases it may be desirable to check the validity of the parameters relative to each other,
 this can be important to prevent program crashes due to invalid parameters that individually evaluated as valid values.
@@ -545,9 +545,9 @@ bool ValidateFunc(bool b, const std::string& s)
 ````
 ````C++
 // Defer to an existing function
-h.RegisterInitialisation(&ValidateFunc, h.CreateParameter<bool>(...), h.CreateParameter<std::string>(...));
+RegisterInitialisation(&ValidateFunc, CreateParameter<bool>(...), CreateParameter<std::string>(...));
 // OR use a lambda
-h.RegisterInitialisation([](bool b, const std::string& s){ return b == s.empty(); }, h.CreateParameter<bool>(...), h.CreateParameter<std::string>(...));
+RegisterInitialisation([](bool b, const std::string& s){ return b == s.empty(); }, CreateParameter<bool>(...), CreateParameter<std::string>(...));
 ````
 
 [Back to Index](#Table-of-Contents)
@@ -632,6 +632,11 @@ Some types may have member variables that are not set via a constructor or initi
 There are a few overloads, which are similar to `CreateParameter`, except that we also need to specify a `setter` as well as the `getter`.
 
 In the case where the variable is a public member of the type, `&T::memberVariableName_` can be used for both reading and writing the value.
+
+The `getterAndSetter` parameter of the first overload can be:
+|                Name                 |           Example         |
+| ----------------------------------- | --------------------------|
+| A public object member pointer      | `&T::memberVariableName_` |
 
 ````C++
 RegisterVariable(MemberObjectPointer* getterAndSetter, optional<string> label, optional<bool(const ParamType&)> validator)
@@ -743,7 +748,7 @@ It it an extension of `JsonClassSerialiser` so it already defines the Validate, 
 template<>
 class esd::JsonSerialiser<T> : public esd::JsonPolymorphicClassSerialiser<T, ConstructionParameterTypes...> {
 public:
-    static void SetupHelper(HelperType& h);
+    static void SetupHelper();
 };
 ````
 
@@ -769,10 +774,11 @@ Each child type must also have a defined `esd::JsonSerialiser<ChildT>` that exte
  [x] Support Polymorphism
  [x] Adjust the content of this README to match the table of content
  [ ] Inline Documentation of why I've created various types and functions, with intended purpose
- [ ] Hide HelperType from the user, implement static passthrough methods inside `esd::JsonClassHelper` itself, hide the `HelperType` from the user, and change `void SetupHelper(HelperType h)` to `void Configure()`
+ [x] Hide HelperType from the user, implement static passthrough methods inside `esd::JsonClassHelper` itself, hide the `HelperType` from the user
  [ ] Create an `esd` directory and move all headers into it, renaming them to remove the `EasySerDes` prefix (except EasySerDes.h!)
  [ ] Remove Json prefixes from type and header names
  [ ] Change type names to match header names
+ [ ] Refactor `void SetupHelper()` to `void Configure()`
  [ ] Refactor `RegisterConstruction` to `SetConstructor` so it is clear it should only be called once
  [ ] Refactor `RegisterInitialisation` to `AddInitialisationCall` so it is clear it can be called multiple times
  [ ] Refactor `RegisterChildTypes` to `SetChildTypes` so it is clear it should be called only once

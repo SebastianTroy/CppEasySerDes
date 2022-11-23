@@ -13,18 +13,22 @@
 
 /**
  * This file adds support for all C++ built in types
+ *
+ * A single template specialisation covering std::arithemtic could cover almost
+ * everything, but then the error messages would be less helpful and the stored
+ * values would be less human readable.
+ *
+ * Pointers and references are not supported, nor are void and nullptr_t.
+ *
+ * As pointers are not supported, neither are built in array types.
+ *
+ * Function pointers are not supported. (would this even be reasonable?)
+ *
+ * Member object/function pointers are not supported. (would this even be
+ * reasonable?)
  */
 
-template <typename T>
-concept IsArithmetic = std::integral<T> || std::floating_point<T>;
-
 namespace esd {
-
-///
-/// Specialisations to support built in C++ types
-///
-
-// bool, int unsigned, float, & double could all probably be covered using an is_arithmetic concept, but then the error messages would be less helpful
 
 template <>
 class JsonSerialiser<bool> {
@@ -45,7 +49,9 @@ public:
     }
 };
 
-// Specialise for char so that is is more user readable in JSON form
+/**
+ * Specialise for char so that is is more user readable in JSON form
+ */
 template <>
 class JsonSerialiser<char> {
 public:
@@ -65,9 +71,11 @@ public:
     }
 };
 
-// Specialisation for all signed integral types supported by the JSON library
-template <typename T>
-requires std::signed_integral<T> && (sizeof(T) <= sizeof(nlohmann::json::number_integer_t))
+/**
+ * Constrained to signed integral types supported by the JSON library
+ */
+template <std::signed_integral T>
+requires (sizeof(T) <= sizeof(nlohmann::json::number_integer_t))
 class JsonSerialiser<T> {
     public:
     static bool Validate(const nlohmann::json& serialised)
@@ -87,9 +95,11 @@ class JsonSerialiser<T> {
     }
 };
 
-// Specialisation for all unsigned integral types supported by the JSON library
-template <typename T>
-requires std::unsigned_integral<T> && (sizeof(T) <= sizeof(nlohmann::json::number_unsigned_t))
+/**
+ * Constrained to unsigned integral types supported by the JSON library
+ */
+template <std::unsigned_integral T>
+requires (sizeof(T) <= sizeof(nlohmann::json::number_unsigned_t))
 class JsonSerialiser<T> {
     public:
     static bool Validate(const nlohmann::json& serialised)
@@ -109,9 +119,11 @@ class JsonSerialiser<T> {
     }
 };
 
-// Specialisation for all floating point types supported by the JSON library
-template <typename T>
-requires std::floating_point<T> && (sizeof(T) <= sizeof(nlohmann::json::number_float_t))
+/**
+ * Constrained to floating point types supported by the JSON library
+ */
+template <std::floating_point T>
+requires (sizeof(T) <= sizeof(nlohmann::json::number_float_t))
 class JsonSerialiser<T> {
 public:
     static bool Validate(const nlohmann::json& serialised)
@@ -131,10 +143,13 @@ public:
     }
 };
 
-// Specialisation for all signed integer types that are NOT supported by the JSON library
-// FIXME untested due to compiler lacking unsigned types larger than sizeof(nlohmann::json::number_integer_t)
-template <typename T>
-requires std::signed_integral<T> && (sizeof(T) > sizeof(nlohmann::json::number_integer_t))
+/**
+ * Specialisation for signed integer types NOT supported by the JSON library
+ *
+ * FIXME untested due lack of compiler support for types larger than sizeof(nlohmann::json::number_integer_t)
+ */
+template <std::signed_integral T>
+requires (sizeof(T) > sizeof(nlohmann::json::number_integer_t))
 class JsonSerialiser<T> {
     public:
     static bool Validate(const nlohmann::json& serialised)
@@ -165,10 +180,13 @@ private:
     static inline std::regex validator_{ R"(^[+-]?[0-9]{1,)" + std::to_string(std::numeric_limits<T>::max_digits10) +  R"(}$)" };
 };
 
-// Specialisation for all unsigned integer types that are NOT supported by the JSON library
-// FIXME untested due to compiler lacking unsigned types larger than sizeof(nlohmann::json::number_unsigned_t)
-template <typename T>
-requires std::unsigned_integral<T> && (sizeof(T) > sizeof(nlohmann::json::number_unsigned_t))
+/**
+ * Specialisation for unsigned integer types NOT supported by the JSON library
+ *
+ * FIXME untested due lack of compiler support for types larger than sizeof(nlohmann::json::number_unsigned_t)
+ */
+template <std::unsigned_integral T>
+requires (sizeof(T) > sizeof(nlohmann::json::number_unsigned_t))
 class JsonSerialiser<T> {
     public:
     static bool Validate(const nlohmann::json& serialised)
@@ -199,9 +217,13 @@ private:
     static inline std::regex validator_{ R"(^[0-9]{1,)" + std::to_string(std::numeric_limits<T>::max_digits10) +  R"(}$)" };
 };
 
-// Specialisation for all floating point types that are NOT supported by the JSON library
-template <typename T>
-requires std::floating_point<T> && (sizeof(T) > sizeof(nlohmann::json::number_float_t))
+/**
+ * Specialisation for floating point types NOT supported by the JSON library
+ *
+ * FIXME untested due lack of compiler support for types larger than sizeof(nlohmann::json::number_unsigned_t)
+ */
+template <std::floating_point T>
+requires (sizeof(T) > sizeof(nlohmann::json::number_float_t))
 class JsonSerialiser<T> {
 public:
     static bool Validate(const nlohmann::json& serialised)
@@ -231,9 +253,9 @@ private:
 };
 
 template <typename T>
-concept EnumConcept = std::is_enum_v<T>;
+concept enumeration = std::is_enum_v<T>; // why isn't this in std?
 
-template <EnumConcept T>
+template <enumeration T>
 class JsonSerialiser<T> {
 public:
     static bool Validate(const nlohmann::json& serialised)
