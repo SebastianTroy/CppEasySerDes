@@ -512,20 +512,9 @@ public:
     ///
     /// It is also important to note that these will almost always be used in a
     /// templated setting, where the user-type is unknown, and therefore the
-    /// construction arguments are also unknown. This is problematic because all
-    /// calls to the factory functions will need to explicitly have the
-    /// ConstructionArgs parameter pack unwrapped as part of the call. As
-    /// parameter packs cannot be stored or shared, the follwoing typedef can be
-    /// used in conjunction with a wrapper for your function call, to pass on
-    /// the parameter pack. See StdLibSupport, specifically std::shared_ptr or
-    /// std::unique_ptr for examples.
+    /// construction arguments are also unknown. This can be side-stepped by
+    /// passing a templated lambda `[](auto... args){ return factory(args...); }`
     ///
-
-    /**
-     * TODO document this in README.md
-     */
-    template <template<typename...> class WrapperType, typename... AdditionalArgs>
-    using ConstructionArgsForwarder = WrapperType<AdditionalArgs..., ConstructionArgs...>;
 
     /**
      * This overload is for factories that return a type that can be de-
@@ -536,7 +525,7 @@ public:
      */
     template <typename Invocable>
     requires std::is_invocable_v<Invocable, ConstructionArgs...>
-    [[nodiscard]] static ReturnTypeNoCVRef<Invocable, ConstructionArgs...> Deserialise(Invocable factory, const nlohmann::json& toDeserialise)
+    [[nodiscard]] static auto Deserialise(Invocable factory, const nlohmann::json& toDeserialise) -> ReturnTypeNoCVRef<Invocable, ConstructionArgs...>
     {
         return helper_.Deserialise(std::forward<Invocable>(factory), toDeserialise);
     }
@@ -551,10 +540,11 @@ public:
      * call to myVec.back().
      *
      * FIXME needs testing
+     * FIXME pretty sure this doesn't work for factories returning void! (need to fix documentation about this too!)
      */
     template <typename Invocable>
     requires std::is_invocable_v<Invocable, ConstructionArgs...>
-    [[nodiscard]] static ReturnTypeNoCVRef<Invocable, ConstructionArgs...> Deserialise(Invocable factory, const std::function<T* (ReturnTypeNoCVRef<Invocable, ConstructionArgs...>&)>& accessResultFromFactoryOutput, const nlohmann::json& toDeserialise)
+    [[nodiscard]] static auto Deserialise(Invocable factory, const std::function<T* (ReturnTypeNoCVRef<Invocable, ConstructionArgs...>&)>& accessResultFromFactoryOutput, const nlohmann::json& toDeserialise) -> ReturnTypeNoCVRef<Invocable, ConstructionArgs...>
     {
         return helper_.Deserialise(std::forward<Invocable>(factory), accessResultFromFactoryOutput, toDeserialise);
     }

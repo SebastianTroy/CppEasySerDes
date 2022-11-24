@@ -25,6 +25,7 @@ A library for easy conversion of C++ types to/from JSON, allowing for a concise 
      - [RegisterVariable](#esdJsonClassSerialiserRegisterVariable)
      - [DefinePostSerialiseAction](#esdJsonClassSerialiserDefinePostSerialiseAction)
      - [DefinePostDeserialiseAction](#esdJsonClassSerialiserDefinePostDeserialiseAction)
+     - [Deserialise (overloads for building in-place)](#esdJsonClassSerialiserDeserialise-overloads)
    - [esd::JsonPolymorphicClassSerialiser](#esdJsonPolymorphicClassSerialiser)
      - [SetChildTypes](#esdJsonPolymorphicClassSerialiserSetChildTypes)
  - [TODO](#TODO)
@@ -739,6 +740,57 @@ void DefinePostDeserialiseAction(std::function<void (const nlohmann::json&, T&)>
 
 [Back to Index](#Table-of-Contents)
 
+#### esd::JsonClassSerialiser::Deserialise overloads
+
+Additional overloads are provided for `Deserialise`, and while they are not utilised by `esd::Deserialise` or `esd::DeserialiseWithoutChecks`, they can be used manually by calling `JsonSerialiser<T>::Deserialise(...)` where `T` has a corresponding `JsonSerialiser` specialisation that extends `JsonClassSerialiser<T, ConstructionArgs...>`.
+
+In all cases, it is important that the instance of `T` created by the factory is accessible to `JsonClassSerialiser`, even if the factory doesn't return an instance directly.
+
+The first overload is for cases where the `factory` returns an instance directly, or the result can be de-referenced, e.g. an iterator, or smart pointer.
+
+````C++
+auto Deserialise(Invocable factory, const nlohmann::json& toDeserialise)
+````
+
+The second overload is for when the `factory` doesn't return an instance, or something that can be dereferenced into an instance. Instead the user must also provide a `accessResultFromFactoryOutput` parameter, which is a function that takes the output of the `factory` and returns the instance of `T` that was just created.
+
+Note that `factory` may not return anything, or something that has no way to return an instance of `T`, in this case you'll need to use lambda capture.
+
+````C++
+auto Deserialise(Invocable factory, const std::function<T* (FactoryReturnType&)>& accessResultFromFactoryOutput, const nlohmann::json& toDeserialise)
+````
+
+Now in cases where we know the type in question, and the construction args we could call
+````C++
+struct T { int i; double d; };
+nlohmann::json serialised = ...;
+JsonSerialiser<T>::Deserialise(std::make_shared<T, int, double>, serialised);
+````
+
+There is however a small problem, we cannot pass `std::make_shared` as a template parameter, or an argument... `&std::make_shared<T>` could be passed because it is a fully formed function pointer, but note that in this case we are limiting ourselves to default constructable types. `std::make_shared<T>(32)` is actually deduced as `std::make_shared<T, int>(32)` by the compiler! Instead we need to let the compiler deduce the types for us using a templated lambda:
+````C++
+template <typename T>
+nlohmann::json serialised = ...;
+JsonSerialiser<T>::Deserialise([](auto... args){ return factory<T>(args...); }, serialised);
+````
+
+An example of this can be seen in the `std::shared_ptr` and `std::unique_ptr` specialisations, where `std::make_shared` and `std::make_unique` are used respectively.
+
+The following code has been cut down for this demonstration.
+````C++
+template <typename T>
+class JsonSerialiser<std::shared_ptr<T>> {
+public:
+    static std::shared_ptr<T> Deserialise(const nlohmann::json& serialised)
+    {
+        if constexpr (TypeSupportedByEasySerDesViaClassHelper<T>) {
+            return JsonSerialiser<T>::Deserialise([](auto... args){ return std::make_shared<T>(args...); }, serialised.at(wrappedTypeKey));
+        }
+    }
+````
+
+[Back to Index](#Table-of-Contents)
+
 ### esd::JsonPolymorphicClassSerialiser
 ---------------------------------------
 
@@ -751,6 +803,8 @@ public:
     static void Configure();
 };
 ````
+
+[Back to Index](#Table-of-Contents)
 
 #### esd::JsonPolymorphicClassSerialiser::SetChildTypes
 ------------------------------------------------------------

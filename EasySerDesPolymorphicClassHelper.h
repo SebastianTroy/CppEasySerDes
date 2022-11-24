@@ -104,8 +104,7 @@ public:
                 nlohmann::json copy = serialised;
                 copy.erase(typeNameKey_);
 
-                auto makeUniquePtr = &JsonSerialiser<T>::template ConstructionArgsForwarder<MakeUniqueWrapper, T>::Invoke;
-                return JsonClassSerialiser<T, ConstructionArgs...>::Deserialise(makeUniquePtr, copy);
+                return JsonClassSerialiser<T, ConstructionArgs...>::Deserialise([](auto... args){ return std::make_unique<T>(args...); }, copy);
             } else {
                 for (const ChildTypeHelper& h : childHelpers_) {
                     if (h.recursiveTypeNameChecker_(serialisedTypeName)) {
@@ -147,14 +146,6 @@ private:
 
         std::function<bool(const T& instance)> isInstanceChecker_ = nullptr;
         std::function<bool(const std::string& typeName)> recursiveTypeNameChecker_ = nullptr;
-    };
-
-    template <typename Type, typename... Params>
-    struct MakeUniqueWrapper {
-        static std::unique_ptr<Type> Invoke(Params... args)
-        {
-            return std::make_unique<Type>(std::forward<Params>(args)...);
-        }
     };
 
     static const inline std::string typeNameKey_ = "__typeName";

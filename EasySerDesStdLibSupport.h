@@ -227,9 +227,7 @@ public:
             if constexpr (TypeSupportedByEasySerDesViaPolymorphicClassHelper<T>) {
                 ret = JsonSerialiser<T>::DeserialisePolymorphic(serialised.at(wrappedTypeKey));
             } else if constexpr (TypeSupportedByEasySerDesViaClassHelper<T>) {
-                // Can't just pass a pointer to the std library function
-                auto makeSharedPtr = &esd::JsonSerialiser<T>::template ConstructionArgsForwarder<MakeSharedWrapper>::Invoke;
-                ret = JsonSerialiser<T>::Deserialise(makeSharedPtr, serialised.at(wrappedTypeKey));
+                ret = JsonSerialiser<T>::Deserialise([](auto... args){ return std::make_shared<T>(args...); }, serialised.at(wrappedTypeKey));
             } else if constexpr (std::is_move_constructible_v<T> || std::is_copy_constructible_v<T>) {
                 ret = std::make_shared<T>(esd::DeserialiseWithoutChecks<T>(serialised.at(wrappedTypeKey)));
             }
@@ -239,14 +237,6 @@ public:
     }
 
 private:
-    template <typename... ConstructionArgs>
-    struct MakeSharedWrapper {
-        static std::shared_ptr<T> Invoke(ConstructionArgs... args)
-        {
-            return std::make_shared<T>(std::forward<ConstructionArgs>(args)...);
-        }
-    };
-
     struct PointerInfo {
         // Stored values may have been modified offline, so cache a different pointer for
         std::map<std::string, std::weak_ptr<T>> variations;
@@ -326,23 +316,13 @@ public:
         if constexpr (TypeSupportedByEasySerDesViaPolymorphicClassHelper<T>) {
             return JsonSerialiser<T>::DeserialisePolymorphic(serialised.at(wrappedTypeKey));
         } else if constexpr (TypeSupportedByEasySerDesViaClassHelper<T>) {
-            // Can't just pass a pointer to the std library function
-            auto makeUniquePtr = &JsonSerialiser<T>::template ConstructionArgsForwarder<MakeUniqueWrapper>::Invoke;
-            return JsonSerialiser<T>::Deserialise(makeUniquePtr, serialised.at(wrappedTypeKey));
+            return JsonSerialiser<T>::Deserialise([](auto... args){ return std::make_unique<T>(args...); }, serialised.at(wrappedTypeKey));
         } else if constexpr (std::is_move_constructible_v<T> || std::is_copy_constructible_v<T>) {
             return std::make_unique<T>(esd::DeserialiseWithoutChecks<T>(serialised.at(wrappedTypeKey)));
         }
     }
 
 private:
-    template <typename... ConstructionArgs>
-    struct MakeUniqueWrapper {
-        static std::unique_ptr<T> Invoke(ConstructionArgs... args)
-        {
-            return std::make_unique<T>(std::forward<ConstructionArgs>(args)...);
-        }
-    };
-
     static inline std::string wrappedTypeKey = "wrappedType";
 };
 
