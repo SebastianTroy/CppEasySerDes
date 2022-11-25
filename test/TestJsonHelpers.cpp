@@ -1,6 +1,6 @@
 #include "TestJsonHelpers.h"
 
-#include "EasySerDesJsonHelpers.h"
+#include <EasySerDes.h>
 
 #include <catch2/catch.hpp>
 

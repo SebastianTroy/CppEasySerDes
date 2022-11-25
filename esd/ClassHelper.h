@@ -1,7 +1,7 @@
 #ifndef EASYSERDESCLASSHELPER_H
 #define EASYSERDESCLASSHELPER_H
 
-#include "EasySerDesCore.h"
+#include "Core.h"
 
 #include <nlohmann/json.hpp>
 

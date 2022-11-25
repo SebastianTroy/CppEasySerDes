@@ -1,7 +1,7 @@
 #ifndef EASYSERDESJSONHELPERS_H
 #define EASYSERDESJSONHELPERS_H
 
-#include "EasySerDesCore.h"
+#include "Core.h"
 
 #include <nlohmann/json.hpp>
 

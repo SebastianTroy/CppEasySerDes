@@ -1,8 +1,8 @@
 #ifndef EASYSERDESSTDLIBSUPPORT_H
 #define EASYSERDESSTDLIBSUPPORT_H
 
-#include "EasySerDesClassHelper.h"
-#include "EasySerDesPolymorphicClassHelper.h"
+#include "ClassHelper.h"
+#include "PolymorphicClassHelper.h"
 
 #include <nlohmann/json.hpp>
 

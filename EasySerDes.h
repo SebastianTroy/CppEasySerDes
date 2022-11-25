@@ -1,11 +1,12 @@
 #ifndef EASYSERDES_H
 #define EASYSERDES_H
 
-#include "EasySerDesCore.h"
-#include "EasySerDesBuiltInTypeSupport.h"
-#include "EasySerDesStdLibSupport.h"
-#include "EasySerDesClassHelper.h"
-#include "EasySerDesJsonHelpers.h"
+#include "esd/Core.h"
+#include "esd/BuiltInTypeSupport.h"
+#include "esd/StdLibSupport.h"
+#include "esd/JsonHelpers.h"
+#include "esd/ClassHelper.h"
+#include "esd/PolymorphicClassHelper.h"
 
 // See README.md for usage, examples, and API overview
 

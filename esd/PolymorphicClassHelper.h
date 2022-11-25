@@ -1,7 +1,7 @@
 #ifndef EASYSERDESPOLYMORPHICCLASSHELPER_H
 #define EASYSERDESPOLYMORPHICCLASSHELPER_H
 
-#include "EasySerDesClassHelper.h"
+#include "ClassHelper.h"
 
 #include <memory>
 

@@ -1,6 +1,6 @@
 #include "TestClassHelper.h"
 
-#include "EasySerDes.h"
+#include <EasySerDes.h>
 
 #include <catch2/catch.hpp>
 

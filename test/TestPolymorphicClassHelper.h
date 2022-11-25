@@ -1,8 +1,8 @@
 #ifndef TESTPOLYMORPHICCLASSHELPER_H
 #define TESTPOLYMORPHICCLASSHELPER_H
 
-#include "EasySerDesPolymorphicClassHelper.h"
-#include "EasySerDesBuiltInTypeSupport.h"
+#include "esd/PolymorphicClassHelper.h"
+#include "esd/BuiltInTypeSupport.h"
 
 #include <iostream>
 

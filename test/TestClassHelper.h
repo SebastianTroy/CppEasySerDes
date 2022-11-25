@@ -1,7 +1,7 @@
 #ifndef TESTCLASSHELPER_H
 #define TESTCLASSHELPER_H
 
-#include "EasySerDesClassHelper.h"
+#include "esd/ClassHelper.h"
 
 class TrivialTestType {
 public:

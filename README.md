@@ -829,7 +829,7 @@ Each child type must also have a defined `esd::JsonSerialiser<ChildT>` that exte
  [x] Adjust the content of this README to match the table of content
  [ ] Inline Documentation of why I've created various types and functions, with intended purpose
  [x] Hide HelperType from the user, implement static passthrough methods inside `esd::JsonClassHelper` itself, hide the `HelperType` from the user
- [ ] Create an `esd` directory and move all headers into it, renaming them to remove the `EasySerDes` prefix (except EasySerDes.h!)
+ [x] Create an `esd` directory and move all headers into it, renaming them to remove the `EasySerDes` prefix (except EasySerDes.h!)
  [ ] Remove Json prefixes from type and header names
  [ ] Change type names to match header names
  [x] Refactor `void SetupHelper()` to `void Configure()`

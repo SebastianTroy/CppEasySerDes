@@ -1,8 +1,8 @@
 #ifndef EASYSERDESBUILTINTYPESUPPORT_H
 #define EASYSERDESBUILTINTYPESUPPORT_H
 
-#include "EasySerDesCore.h"
-#include "EasySerDesJsonHelpers.h"
+#include "Core.h"
+#include "JsonHelpers.h"
 
 #include <nlohmann/json.hpp>
 

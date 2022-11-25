@@ -1,6 +1,6 @@
 #include "TestPolymorphicClassHelper.h"
 
-#include "EasySerDesStdLibSupport.h"
+#include <EasySerDes.h>
 
 #include <catch2/catch.hpp>
 
