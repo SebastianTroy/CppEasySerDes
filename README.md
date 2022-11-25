@@ -26,8 +26,8 @@ A library for easy conversion of C++ types to/from JSON, allowing for a concise 
      - [DefinePostSerialiseAction](#esdClassHelperDefinePostSerialiseAction)
      - [DefinePostDeserialiseAction](#esdClassHelperDefinePostDeserialiseAction)
      - [Deserialise (overloads for building in-place)](#esdClassHelperDeserialise-overloads)
-   - [esd::JsonPolymorphicClassSerialiser](#esdJsonPolymorphicClassSerialiser)
-     - [SetChildTypes](#esdJsonPolymorphicClassSerialiserSetChildTypes)
+   - [esd::PolymorphicClassHelper](#esdPolymorphicClassHelper)
+     - [SetChildTypes](#esdPolymorphicClassHelperSetChildTypes)
  - [TODO](#TODO)
 
 ## Disclaimer
@@ -275,7 +275,7 @@ Next we need to implement their `JsonSerialiser`s. Note that they are implemente
 
 ````C++
 template<>
-class esd::JsonSerialiser<GrandChildType> : public esd::JsonPolymorphicClassSerialiser<GrandChildType, int> {
+class esd::JsonSerialiser<GrandChildType> : public esd::PolymorphicClassHelper<GrandChildType, int> {
 public:
     static void Configure()
     {
@@ -284,7 +284,7 @@ public:
 };
 
 template<>
-class esd::JsonSerialiser<ChildTypeA> : public esd::JsonPolymorphicClassSerialiser<ChildTypeA, bool> {
+class esd::JsonSerialiser<ChildTypeA> : public esd::PolymorphicClassHelper<ChildTypeA, bool> {
 public:
     static void Configure()
     {
@@ -294,7 +294,7 @@ public:
 };
 
 template<>
-class esd::JsonSerialiser<ChildTypeB> : public esd::JsonPolymorphicClassSerialiser<ChildTypeB, std::string> {
+class esd::JsonSerialiser<ChildTypeB> : public esd::PolymorphicClassHelper<ChildTypeB, std::string> {
 public:
     static void Configure()
     {
@@ -303,7 +303,7 @@ public:
 };
 
 template<>
-class esd::JsonSerialiser<ParentType> : public esd::JsonPolymorphicClassSerialiser<ParentType, int> {
+class esd::JsonSerialiser<ParentType> : public esd::PolymorphicClassHelper<ParentType, int> {
 public:
     static void Configure()
     {
@@ -378,9 +378,9 @@ Thirdly, via the esd::JsonPolymorphicClassHelper ValidatePolymorphic, SerialiseP
 std::shared_ptr<ParentType> originalSharedInstance = std::make_shared<GrandChildType>(79);
 nlohmann::json serialised = esd::Serialise(originalSharedInstance);
 // This DOES NOT point to the same instance as originalSharedInstance
-std::shared_ptr<ParentType> deserialisedSharedInstance = esd::JsonPolymorphicClassSerialiser<GrandChildType, int>::DeserialisePolymorphic(serialised);
+std::shared_ptr<ParentType> deserialisedSharedInstance = esd::PolymorphicClassHelper<GrandChildType, int>::DeserialisePolymorphic(serialised);
 // This DOES NOT point to the same instance as deserialisedSharedInstance (the shared_ptr tracking is done inside the `JsonSerialiser<std::shared_ptr<...>>` specialisation)
-std::shared_ptr<ParentType> anotherSharedInstance = esd::JsonPolymorphicClassSerialiser<GrandChildType, int>::DeserialisePolymorphic(serialised);
+std::shared_ptr<ParentType> anotherSharedInstance = esd::PolymorphicClassHelper<GrandChildType, int>::DeserialisePolymorphic(serialised);
 ````
 
 [Back to Index](#Table-of-Contents)
@@ -442,7 +442,7 @@ T DeserialiseWithoutChecks(const nlohmann::json& serialised);
 
 For any of your types to be supported by this library, you must create a specialisation of the following templated type.
 Every esd::JsonSerialiser must implement a static Validate, Serialise and Deserialise function.
-It is **NOT RECOMMENDED** that you support your types directly like this, see esd::ClassHelper and esd::JsonPolymorphicClassSerialiser below!
+It is **NOT RECOMMENDED** that you support your types directly like this, see esd::ClassHelper and esd::PolymorphicClassHelper below!
 ````C++
 template<>
 class esd::JsonSerialiser<T> {
@@ -791,14 +791,14 @@ public:
 
 [Back to Index](#Table-of-Contents)
 
-### esd::JsonPolymorphicClassSerialiser
+### esd::PolymorphicClassHelper
 ---------------------------------------
 
-To make use of the `JsonPolymorphicClassSerialiser` you publically extend it when you are implementing an esd::JsonSerialiser.
+To make use of the `PolymorphicClassHelper` you publically extend it when you are implementing an esd::JsonSerialiser.
 It it an extension of `ClassHelper` so it already defines the Validate, Serialise and Deserialise functions for you, and you implement the same static Configure function as below.
 ````C++
 template<>
-class esd::JsonSerialiser<T> : public esd::JsonPolymorphicClassSerialiser<T, ConstructionParameterTypes...> {
+class esd::JsonSerialiser<T> : public esd::PolymorphicClassHelper<T, ConstructionParameterTypes...> {
 public:
     static void Configure();
 };
@@ -806,7 +806,7 @@ public:
 
 [Back to Index](#Table-of-Contents)
 
-#### esd::JsonPolymorphicClassSerialiser::SetChildTypes
+#### esd::PolymorphicClassHelper::SetChildTypes
 ------------------------------------------------------------
 
 The only difference between using this type and `esd::ClassHelper` is that you need to specify the child types of your type.
@@ -816,7 +816,7 @@ The only difference between using this type and `esd::ClassHelper` is that you n
 SetChildTypes<ChildT1, ChildT2, ChildT3, ...>();
 ````
 
-Each child type must also have a defined `esd::JsonSerialiser<ChildT>` that extends `esd::JsonPolymorphicClassSerialiser`. The requirement to specify the child types means the definitions of each serialiser must be defined in reverse heirarchical order, i.e. from grandest child type first, to base type last.
+Each child type must also have a defined `esd::JsonSerialiser<ChildT>` that extends `esd::PolymorphicClassHelper`. The requirement to specify the child types means the definitions of each serialiser must be defined in reverse heirarchical order, i.e. from grandest child type first, to base type last.
 
 [Back to Index](#Table-of-Contents)
 
@@ -836,6 +836,7 @@ Each child type must also have a defined `esd::JsonSerialiser<ChildT>` that exte
  [x] Refactor `RegisterConstruction` to `SetConstruction` so it is clear it should only be called once
  [x] Refactor `RegisterInitialisation` to `AddInitialisationCall` so it is clear it can be called multiple times
  [x] Refactor `RegisterChildTypes` to `SetChildTypes` so it is clear it should be called only once
+ [ ] Refactor `PolmorphicClassHelper` to `PolymorphismHelper`, make it not extend ClassHelper, set child types in class template, removing need for a call to SetChildTypes (is this possible?! still need to call static code somewhere too add the child types!)
  [ ] Add to website and link to website in README
  [ ] In the "Adding It To Your Own Project" section, link to one of my projects that uses this library as a complete example
  [ ] MAYBE POD helper (that would implement the `Configure` function automatically)

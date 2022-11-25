@@ -188,7 +188,7 @@ template <typename T>
 concept TypeSupportedByEasySerDesViaClassHelper = IsDerivedFromSpecialisationOf<JsonSerialiser<T>, ClassHelper>;
 
 template <typename T>
-concept TypeSupportedByEasySerDesViaPolymorphicClassHelper = IsDerivedFromSpecialisationOf<JsonSerialiser<T>, JsonPolymorphicClassSerialiser>;
+concept TypeSupportedByEasySerDesViaPolymorphicClassHelper = IsDerivedFromSpecialisationOf<JsonSerialiser<T>, PolymorphicClassHelper>;
 
 template <typename T>
 requires TypeSupportedByEasySerDesViaClassHelper<T>

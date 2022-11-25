@@ -104,7 +104,7 @@ TEST_CASE("Polymorphic types treated polymorphically", "[json]")
 
         json serialised = esd::Serialise(original);
         REQUIRE(esd::Validate<TestType>(serialised));
-        REQUIRE(esd::JsonPolymorphicClassSerialiser<GrandChildTestType, double, bool>::Validate(serialised));
+        REQUIRE(esd::PolymorphicClassHelper<GrandChildTestType, double, bool>::Validate(serialised));
 
         TestType deserialised = esd::DeserialiseWithoutChecks<TestType>(serialised);
         json deserialisedReserialised = esd::Serialise(deserialised);
@@ -126,7 +126,7 @@ TEST_CASE("Polymorphic types treated polymorphically", "[json]")
 
         json serialised = esd::Serialise(original);
         REQUIRE(esd::Validate<TestType>(serialised));
-        REQUIRE(esd::JsonPolymorphicClassSerialiser<ChildTestTypeB, double, bool>::Validate(serialised));
+        REQUIRE(esd::PolymorphicClassHelper<ChildTestTypeB, double, bool>::Validate(serialised));
 
         TestType deserialised = esd::DeserialiseWithoutChecks<TestType>(serialised);
         json deserialisedReserialised = esd::Serialise(deserialised);

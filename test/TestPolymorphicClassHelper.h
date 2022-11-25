@@ -114,7 +114,7 @@ std::ostream& operator<<(std::ostream& ostr, const GrandChildTestType& value)
  */
 
 template<>
-class esd::JsonSerialiser<GrandChildTestType> : public esd::JsonPolymorphicClassSerialiser<GrandChildTestType, double, bool> {
+class esd::JsonSerialiser<GrandChildTestType> : public esd::PolymorphicClassHelper<GrandChildTestType, double, bool> {
 public:
     static void Configure()
     {
@@ -124,7 +124,7 @@ public:
 };
 
 template<>
-class esd::JsonSerialiser<ChildTestTypeB> : public esd::JsonPolymorphicClassSerialiser<ChildTestTypeB, double, bool> {
+class esd::JsonSerialiser<ChildTestTypeB> : public esd::PolymorphicClassHelper<ChildTestTypeB, double, bool> {
 public:
     static void Configure()
     {
@@ -135,7 +135,7 @@ public:
 };
 
 template<>
-class esd::JsonSerialiser<ChildTestTypeA> : public esd::JsonPolymorphicClassSerialiser<ChildTestTypeA, double> {
+class esd::JsonSerialiser<ChildTestTypeA> : public esd::PolymorphicClassHelper<ChildTestTypeA, double> {
 public:
     static void Configure()
     {
@@ -144,7 +144,7 @@ public:
 };
 
 template<>
-class esd::JsonSerialiser<BaseTestType> : public esd::JsonPolymorphicClassSerialiser<BaseTestType, double> {
+class esd::JsonSerialiser<BaseTestType> : public esd::PolymorphicClassHelper<BaseTestType, double> {
 public:
     static void Configure()
     {

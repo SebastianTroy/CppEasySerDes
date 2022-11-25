@@ -56,7 +56,7 @@ concept IsDerivedFromSpecialisationOf = requires(const T& t) {
 };
 
 template <typename T, typename... ConstructionArgs>
-class JsonPolymorphicClassSerialiser : public ClassHelper<T, ConstructionArgs...> {
+class PolymorphicClassHelper : public ClassHelper<T, ConstructionArgs...> {
 public:
 
     // Validate|Serialise|DeserialisePolymorphic each check all of their child types to see if a child method ought to be called instead
@@ -130,7 +130,7 @@ public:
           && (... && std::derived_from<ChildTypes, T>)
           && (... && NotDerivedFromAnyOf<ChildTypes, ChildTypes...>)
           && (... && TypeSupportedByEasySerDes<ChildTypes>)
-          && (... && IsDerivedFromSpecialisationOf<JsonSerialiser<ChildTypes>, esd::JsonPolymorphicClassSerialiser>)
+          && (... && IsDerivedFromSpecialisationOf<JsonSerialiser<ChildTypes>, esd::PolymorphicClassHelper>)
     static void SetChildTypes()
     {
         childHelpers_.clear();
