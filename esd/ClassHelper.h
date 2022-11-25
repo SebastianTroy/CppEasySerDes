@@ -11,9 +11,9 @@
 /**
  * This file allows users to more easily support their own class types.
  *
- * The entire aim of JsonClassSerialiser is to prevent the need for a user to
- * define seperate Validate, Serialise, and Deserialise functions when creating
- * an esd::JsonSerialiser specialisation for their own classes/structs.
+ * The entire aim of ClassHelper is to prevent the need for a user to define
+ * seperate Validate, Serialise, and Deserialise functions when creating an
+ * esd::JsonSerialiser specialisation for their own classes/structs.
  */
 
 namespace esd {
@@ -39,8 +39,8 @@ namespace {
 
     /**
      * Forward declaration of helper type, because it was desirable to define
-     * JsonClassSerialiser first. This helper encapsulates implementation
-     * details, and also makes it easy to call Configure once.
+     * ClassHelper first. This helper encapsulates implementation details, and
+     * also makes it easy to call Configure once.
      */
     template <typename T, typename... ConstructionArgs>
     requires std::is_class_v<T>
@@ -61,9 +61,9 @@ namespace {
 } // end anon namespace
 
 /**
- * @brief The JsonClassSerialiser class should be extended by the user in order
- * to allow CppEasySerDes to support custom user types:
- * `esd::JsonSerialiser<T> : public esd::JsonClassSerialiser<T, Args...>`
+ * @brief The ClassHelper class should be extended by the user in order to allow
+ * CppEasySerDes to support custom user types:
+ * `esd::JsonSerialiser<T> : public esd::ClassHelper<T, Args...>`
  *
  * T                Is the type to be supported.
  *
@@ -87,7 +87,7 @@ namespace {
  */
 template <typename T, typename... ConstructionArgs>
 requires std::is_class_v<T> && (std::is_default_constructible_v<T> || std::constructible_from<T, ConstructionArgs...>)
-class JsonClassSerialiser {
+class ClassHelper {
 public:
     ///
     /// SetConstruction

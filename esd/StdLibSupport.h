@@ -47,7 +47,7 @@ public:
 };
 
 template <typename T1, typename T2>
-class JsonSerialiser<std::pair<T1, T2>> : public JsonClassSerialiser<std::pair<T1, T2>, T1, T2> {
+class JsonSerialiser<std::pair<T1, T2>> : public ClassHelper<std::pair<T1, T2>, T1, T2> {
 public:
     // FIXME use "HelperType" when it supports templated types
     static void Configure()
@@ -59,7 +59,7 @@ public:
 };
 
 template <typename... Ts>
-class JsonSerialiser<std::tuple<Ts...>> : public JsonClassSerialiser<std::tuple<Ts...>, Ts...> {
+class JsonSerialiser<std::tuple<Ts...>> : public ClassHelper<std::tuple<Ts...>, Ts...> {
 public:
     // FIXME use "HelperType" when it supports templated types
     static void Configure()
@@ -185,7 +185,7 @@ private:
 // Ideally support for those types would be completely encapsulated within their own headers
 
 template <typename T>
-concept TypeSupportedByEasySerDesViaClassHelper = IsDerivedFromSpecialisationOf<JsonSerialiser<T>, JsonClassSerialiser>;
+concept TypeSupportedByEasySerDesViaClassHelper = IsDerivedFromSpecialisationOf<JsonSerialiser<T>, ClassHelper>;
 
 template <typename T>
 concept TypeSupportedByEasySerDesViaPolymorphicClassHelper = IsDerivedFromSpecialisationOf<JsonSerialiser<T>, JsonPolymorphicClassSerialiser>;

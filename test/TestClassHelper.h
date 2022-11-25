@@ -131,7 +131,7 @@ std::ostream& operator<<(std::ostream& ostr, const NestedTestType& value)
 namespace esd {
 
 template<>
-class JsonSerialiser<TrivialTestType> : public JsonClassSerialiser<TrivialTestType, int, std::vector<int>, std::string> {
+class JsonSerialiser<TrivialTestType> : public ClassHelper<TrivialTestType, int, std::vector<int>, std::string> {
 public:
     static void Configure()
     {
@@ -142,7 +142,7 @@ public:
 };
 
 template<>
-class JsonSerialiser<NonTrivialTestType> : public JsonClassSerialiser<NonTrivialTestType, int> {
+class JsonSerialiser<NonTrivialTestType> : public ClassHelper<NonTrivialTestType, int> {
 public:
     static void Configure()
     {
@@ -152,7 +152,7 @@ public:
 };
 
 template<>
-class JsonSerialiser<InitialisedTestType> : public JsonClassSerialiser<InitialisedTestType> {
+class JsonSerialiser<InitialisedTestType> : public ClassHelper<InitialisedTestType> {
 public:
     static void Configure()
     {
@@ -164,7 +164,7 @@ public:
 };
 
 template<>
-class JsonSerialiser<NestedTestType> : public JsonClassSerialiser<NestedTestType, NonTrivialTestType> {
+class JsonSerialiser<NestedTestType> : public ClassHelper<NestedTestType, NonTrivialTestType> {
 public:
     static void Configure()
     {

@@ -56,7 +56,7 @@ concept IsDerivedFromSpecialisationOf = requires(const T& t) {
 };
 
 template <typename T, typename... ConstructionArgs>
-class JsonPolymorphicClassSerialiser : public JsonClassSerialiser<T, ConstructionArgs...> {
+class JsonPolymorphicClassSerialiser : public ClassHelper<T, ConstructionArgs...> {
 public:
 
     // Validate|Serialise|DeserialisePolymorphic each check all of their child types to see if a child method ought to be called instead
@@ -70,7 +70,7 @@ public:
             if (typeName_ == serialisedTypeName) {
                 nlohmann::json copy = serialised;
                 copy.erase(typeNameKey_);
-                return JsonClassSerialiser<T, ConstructionArgs...>::Validate(copy);
+                return ClassHelper<T, ConstructionArgs...>::Validate(copy);
             } else {
                 for (const ChildTypeHelper& h : childHelpers_) {
                     if (h.recursiveTypeNameChecker_(serialisedTypeName)) {
@@ -90,7 +90,7 @@ public:
             }
         }
 
-        nlohmann::json serialised = JsonClassSerialiser<T, ConstructionArgs...>::Serialise(value);
+        nlohmann::json serialised = ClassHelper<T, ConstructionArgs...>::Serialise(value);
         serialised[typeNameKey_] = typeName_;
         return serialised;
     }
@@ -104,7 +104,7 @@ public:
                 nlohmann::json copy = serialised;
                 copy.erase(typeNameKey_);
 
-                return JsonClassSerialiser<T, ConstructionArgs...>::Deserialise([](auto... args){ return std::make_unique<T>(args...); }, copy);
+                return ClassHelper<T, ConstructionArgs...>::Deserialise([](auto... args){ return std::make_unique<T>(args...); }, copy);
             } else {
                 for (const ChildTypeHelper& h : childHelpers_) {
                     if (h.recursiveTypeNameChecker_(serialisedTypeName)) {

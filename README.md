@@ -18,14 +18,14 @@ A library for easy conversion of C++ types to/from JSON, allowing for a concise 
  - [The API](#The-API)
    - [esd namespace Functions](#esd-namespace-Functions)
    - [esd::JsonSerialiser](#esdJsonSerialiser)
-   - [esd::JsonClassSerialiser](#esdJsonClassSerialiser)
-     - [SetConstruction](#esdJsonClassSerialiserSetConstruction)
-     - [AddInitialisationCall](#esdJsonClassSerialiserAddInitialisationCall)
-     - [CreateParameter](#esdJsonClassSerialiserCreateParameter)
-     - [RegisterVariable](#esdJsonClassSerialiserRegisterVariable)
-     - [DefinePostSerialiseAction](#esdJsonClassSerialiserDefinePostSerialiseAction)
-     - [DefinePostDeserialiseAction](#esdJsonClassSerialiserDefinePostDeserialiseAction)
-     - [Deserialise (overloads for building in-place)](#esdJsonClassSerialiserDeserialise-overloads)
+   - [esd::ClassHelper](#esdClassHelper)
+     - [SetConstruction](#esdClassHelperSetConstruction)
+     - [AddInitialisationCall](#esdClassHelperAddInitialisationCall)
+     - [CreateParameter](#esdClassHelperCreateParameter)
+     - [RegisterVariable](#esdClassHelperRegisterVariable)
+     - [DefinePostSerialiseAction](#esdClassHelperDefinePostSerialiseAction)
+     - [DefinePostDeserialiseAction](#esdClassHelperDefinePostDeserialiseAction)
+     - [Deserialise (overloads for building in-place)](#esdClassHelperDeserialise-overloads)
    - [esd::JsonPolymorphicClassSerialiser](#esdJsonPolymorphicClassSerialiser)
      - [SetChildTypes](#esdJsonPolymorphicClassSerialiserSetChildTypes)
  - [TODO](#TODO)
@@ -136,7 +136,7 @@ void LoadGame(const std::string& filename)
 ### Supporting A Trivial Type
 -----------------
 
-This is intended to be the most common use case. The following example demonstrates how you would use the esd::JsonClassSerialiser to support a struct, and optionally assign a label and/or additional validation to each struct member variable.
+This is intended to be the most common use case. The following example demonstrates how you would use the esd::ClassHelper to support a struct, and optionally assign a label and/or additional validation to each struct member variable.
 ````C++
 struct TrivialType {
     int a_;
@@ -145,13 +145,13 @@ struct TrivialType {
 };
 
 template<>
-struct esd::JsonSerialiser<TrivialTestType> : public esd::JsonClassSerialiser<TrivialTestType, int, std::vector<int>, std::string> {
+struct esd::JsonSerialiser<TrivialType> : public esd::ClassHelper<TrivialType, int, std::vector<int>, std::string> {
     static void Configure()
     {
         // Here we pass in static member object pointers that can be applied to an instance of the type later
-        SetConstruction(CreateParameter(&TrivialTestType::a_), 
-                        CreateParameter(&TrivialTestType::b_, "B"),
-                        CreateParameter(&TrivialTestType::c_, std::nullopt, [](const std::string&) -> bool { /* custom validation */ }));
+        SetConstruction(CreateParameter(&TrivialType::a_), 
+                        CreateParameter(&TrivialType::b_, "B"),
+                        CreateParameter(&TrivialType::c_, std::nullopt, [](const std::string&) -> bool { /* custom validation */ }));
     }
 };
 ````
@@ -191,7 +191,7 @@ private:
 };
 
 template<>
-class esd::JsonSerialiser<ContrivedType> : public esd::JsonClassSerialiser<ContrivedType, int> {
+class esd::JsonSerialiser<ContrivedType> : public esd::ClassHelper<ContrivedType, int> {
 public:
     static void Configure()
     {
@@ -378,9 +378,9 @@ Thirdly, via the esd::JsonPolymorphicClassHelper ValidatePolymorphic, SerialiseP
 std::shared_ptr<ParentType> originalSharedInstance = std::make_shared<GrandChildType>(79);
 nlohmann::json serialised = esd::Serialise(originalSharedInstance);
 // This DOES NOT point to the same instance as originalSharedInstance
-std::shared_ptr<ParentType> deserialisedSharedInstance = esd::JsonPolymorphicClassSerialiser<BaseTestType, int>::DeserialisePolymorphic(serialised);
+std::shared_ptr<ParentType> deserialisedSharedInstance = esd::JsonPolymorphicClassSerialiser<GrandChildType, int>::DeserialisePolymorphic(serialised);
 // This DOES NOT point to the same instance as deserialisedSharedInstance (the shared_ptr tracking is done inside the `JsonSerialiser<std::shared_ptr<...>>` specialisation)
-std::shared_ptr<ParentType> anotherSharedInstance = esd::JsonPolymorphicClassSerialiser<BaseTestType, int>::DeserialisePolymorphic(serialised);
+std::shared_ptr<ParentType> anotherSharedInstance = esd::JsonPolymorphicClassSerialiser<GrandChildType, int>::DeserialisePolymorphic(serialised);
 ````
 
 [Back to Index](#Table-of-Contents)
@@ -442,7 +442,7 @@ T DeserialiseWithoutChecks(const nlohmann::json& serialised);
 
 For any of your types to be supported by this library, you must create a specialisation of the following templated type.
 Every esd::JsonSerialiser must implement a static Validate, Serialise and Deserialise function.
-It is **NOT RECOMMENDED** that you support your types directly like this, see esd::JsonClassSerialiser and esd::JsonPolymorphicClassSerialiser below!
+It is **NOT RECOMMENDED** that you support your types directly like this, see esd::ClassHelper and esd::JsonPolymorphicClassSerialiser below!
 ````C++
 template<>
 class esd::JsonSerialiser<T> {
@@ -455,19 +455,19 @@ public:
 
 [Back to Index](#Table-of-Contents)
 
-### esd::JsonClassSerialiser
+### esd::ClassHelper
 ----------------------------
 
-To make use of the `JsonClassSerialiser` you publically extend it when you are implementing an esd::JsonSerialiser.
+To make use of the `ClassHelper` you publically extend it when you are implementing an esd::JsonSerialiser.
 It already defines the Validate, Serialise and Deserialise functions for you, so all that remains is to define a static Configure function as below.
 ````C++
 template<>
-class esd::JsonSerialiser<T> : public esd::JsonClassSerialiser<T, ConstructionParameterTypes...> {
+class esd::JsonSerialiser<T> : public esd::ClassHelper<T, ConstructionParameterTypes...> {
 public:
     static void Configure();
 };
 ````
-#### esd::JsonClassSerialiser::SetConstruction
+#### esd::ClassHelper::SetConstruction
 ---------------------------------------------------
 
 This **MUST** be called if your type is not default constructable, or if your type is default constructable and has an alternative constructor that you would like to use.
@@ -509,7 +509,7 @@ SetConstruction([](int i, const std::string& s){ return i < s.size(); }, CreateP
 
 [Back to Index](#Table-of-Contents)
 
-#### esd::JsonClassSerialiser::AddInitialisationCall
+#### esd::ClassHelper::AddInitialisationCall
 -----------------------------------------------------
 
 Some types may not complete their initialisation within a constructor, but instead require a subsequent call to some initialise function.
@@ -553,7 +553,7 @@ AddInitialisationCall([](bool b, const std::string& s){ return b == s.empty(); }
 
 [Back to Index](#Table-of-Contents)
 
-#### esd::JsonClassSerialiser::CreateParameter
+#### esd::ClassHelper::CreateParameter
 ----------------------------------------------
 
 This function is used with both `SetConstruction` and `AddInitialisationCall`, as both require `0` or more `CreateParameter` return types as input.
@@ -626,7 +626,7 @@ CreateParam([](const T& instance) -> std::pair<int, int> { return std::make_pair
 
 [Back to Index](#Table-of-Contents)
 
-#### esd::JsonClassSerialiser::RegisterVariable
+#### esd::ClassHelper::RegisterVariable
 ----------------------------------------------
 
 Some types may have member variables that are not set via a constructor or initialise function, and therefore need to be dealt with seperately.
@@ -710,7 +710,7 @@ RegisterVariable(std::move(getter), std::move(setter), "min-max", std::move(vali
 
 [Back to Index](#Table-of-Contents)
 
-#### esd::JsonClassSerialiser::DefinePostSerialiseAction
+#### esd::ClassHelper::DefinePostSerialiseAction
 --------------------------------------------------------
 
 This function is included alongside `DefinePostDeserialiseAction` to allow complete flexibility. It is not intended that these functions be used often.
@@ -725,7 +725,7 @@ void DefinePostSerialiseAction(std::function<void (const T&, nlohmann::json&)>&&
 
 [Back to Index](#Table-of-Contents)
 
-#### esd::JsonClassSerialiser::DefinePostDeserialiseAction
+#### esd::ClassHelper::DefinePostDeserialiseAction
 ----------------------------------------------------------
 
 This function is included alongside `DefinePostSerialiseAction` to allow complete flexibility. It is not intended that these functions be used often.
@@ -740,11 +740,11 @@ void DefinePostDeserialiseAction(std::function<void (const nlohmann::json&, T&)>
 
 [Back to Index](#Table-of-Contents)
 
-#### esd::JsonClassSerialiser::Deserialise overloads
+#### esd::ClassHelper::Deserialise overloads
 
-Additional overloads are provided for `Deserialise`, and while they are not utilised by `esd::Deserialise` or `esd::DeserialiseWithoutChecks`, they can be used manually by calling `JsonSerialiser<T>::Deserialise(...)` where `T` has a corresponding `JsonSerialiser` specialisation that extends `JsonClassSerialiser<T, ConstructionArgs...>`.
+Additional overloads are provided for `Deserialise`, and while they are not utilised by `esd::Deserialise` or `esd::DeserialiseWithoutChecks`, they can be used manually by calling `JsonSerialiser<T>::Deserialise(...)` where `T` has a corresponding `JsonSerialiser` specialisation that extends `ClassHelper<T, ConstructionArgs...>`.
 
-In all cases, it is important that the instance of `T` created by the factory is accessible to `JsonClassSerialiser`, even if the factory doesn't return an instance directly.
+In all cases, it is important that the instance of `T` created by the factory is accessible to `ClassHelper`, even if the factory doesn't return an instance directly.
 
 The first overload is for cases where the `factory` returns an instance directly, or the result can be de-referenced, e.g. an iterator, or smart pointer.
 
@@ -795,7 +795,7 @@ public:
 ---------------------------------------
 
 To make use of the `JsonPolymorphicClassSerialiser` you publically extend it when you are implementing an esd::JsonSerialiser.
-It it an extension of `JsonClassSerialiser` so it already defines the Validate, Serialise and Deserialise functions for you, and you implement the same static Configure function as below.
+It it an extension of `ClassHelper` so it already defines the Validate, Serialise and Deserialise functions for you, and you implement the same static Configure function as below.
 ````C++
 template<>
 class esd::JsonSerialiser<T> : public esd::JsonPolymorphicClassSerialiser<T, ConstructionParameterTypes...> {
@@ -809,7 +809,7 @@ public:
 #### esd::JsonPolymorphicClassSerialiser::SetChildTypes
 ------------------------------------------------------------
 
-The only difference between using this type and `esd::JsonClassSerialiser` is that you need to specify the child types of your type.
+The only difference between using this type and `esd::ClassHelper` is that you need to specify the child types of your type.
 
 ````C++
 // Call this in `Configure`, it is not a member of `HelperType`
