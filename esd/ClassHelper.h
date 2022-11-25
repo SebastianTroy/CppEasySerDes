@@ -13,7 +13,7 @@
  *
  * The entire aim of ClassHelper is to prevent the need for a user to define
  * seperate Validate, Serialise, and Deserialise functions when creating an
- * esd::JsonSerialiser specialisation for their own classes/structs.
+ * esd::Serialiser specialisation for their own classes/structs.
  */
 
 namespace esd {
@@ -63,7 +63,7 @@ namespace {
 /**
  * @brief The ClassHelper class should be extended by the user in order to allow
  * CppEasySerDes to support custom user types:
- * `esd::JsonSerialiser<T> : public esd::ClassHelper<T, Args...>`
+ * `esd::Serialiser<T> : public esd::ClassHelper<T, Args...>`
  *
  * T                Is the type to be supported.
  *
@@ -463,8 +463,8 @@ public:
     /// ------------------------------------
     ///
     /// These are declared publically so that when the user specialises a
-    /// esd::JsonSerialiser that extends this type, they only need to implement
-    /// the Configure method.
+    /// esd::Serialiser that extends this type, they only need to implement the
+    /// Configure method.
     ///
 
     /**
@@ -551,7 +551,7 @@ public:
 
 private:
     using HelperType = esd::InternalHelper<T, ConstructionArgs...>;
-    static inline HelperType helper_ = [](){ HelperType h; JsonSerialiser<T>::Configure(); return h; }();
+    static inline HelperType helper_ = [](){ HelperType h; Serialiser<T>::Configure(); return h; }();
 };
 
 namespace {

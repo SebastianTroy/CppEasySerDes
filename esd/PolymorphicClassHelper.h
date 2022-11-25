@@ -130,7 +130,7 @@ public:
           && (... && std::derived_from<ChildTypes, T>)
           && (... && NotDerivedFromAnyOf<ChildTypes, ChildTypes...>)
           && (... && TypeSupportedByEasySerDes<ChildTypes>)
-          && (... && IsDerivedFromSpecialisationOf<JsonSerialiser<ChildTypes>, esd::PolymorphicClassHelper>)
+          && (... && IsDerivedFromSpecialisationOf<Serialiser<ChildTypes>, esd::PolymorphicClassHelper>)
     static void SetChildTypes()
     {
         childHelpers_.clear();
@@ -162,15 +162,15 @@ private:
             childTypeName,
             [](const nlohmann::json& serialised) -> bool
             {
-                return JsonSerialiser<ChildType>::ValidatePolymorphic(serialised);
+                return Serialiser<ChildType>::ValidatePolymorphic(serialised);
             },
             [=](const T& toSerialise) -> nlohmann::json
             {
-                return JsonSerialiser<ChildType>::SerialisePolymorphic(dynamic_cast<const ChildType&>(toSerialise));
+                return Serialiser<ChildType>::SerialisePolymorphic(dynamic_cast<const ChildType&>(toSerialise));
             },
             [](const nlohmann::json& serialised) -> std::unique_ptr<T>
             {
-                return JsonSerialiser<ChildType>::DeserialisePolymorphic(serialised);
+                return Serialiser<ChildType>::DeserialisePolymorphic(serialised);
             },
             [](const T& instance) -> bool
             {
@@ -178,7 +178,7 @@ private:
             },
             [](const std::string& typeName) -> bool
             {
-                return JsonSerialiser<ChildType>::RecursivelyCheckTypeName(typeName);
+                return Serialiser<ChildType>::RecursivelyCheckTypeName(typeName);
             }
         );
     }

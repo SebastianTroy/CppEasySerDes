@@ -31,7 +31,7 @@
 namespace esd {
 
 template <>
-class JsonSerialiser<bool> {
+class Serialiser<bool> {
 public:
     static bool Validate(const nlohmann::json& serialised)
     {
@@ -53,7 +53,7 @@ public:
  * Specialise for char so that is is more user readable in JSON form
  */
 template <>
-class JsonSerialiser<char> {
+class Serialiser<char> {
 public:
     static bool Validate(const nlohmann::json& serialised)
     {
@@ -76,7 +76,7 @@ public:
  */
 template <std::signed_integral T>
 requires (sizeof(T) <= sizeof(nlohmann::json::number_integer_t))
-class JsonSerialiser<T> {
+class Serialiser<T> {
     public:
     static bool Validate(const nlohmann::json& serialised)
     {
@@ -100,7 +100,7 @@ class JsonSerialiser<T> {
  */
 template <std::unsigned_integral T>
 requires (sizeof(T) <= sizeof(nlohmann::json::number_unsigned_t))
-class JsonSerialiser<T> {
+class Serialiser<T> {
     public:
     static bool Validate(const nlohmann::json& serialised)
     {
@@ -124,7 +124,7 @@ class JsonSerialiser<T> {
  */
 template <std::floating_point T>
 requires (sizeof(T) <= sizeof(nlohmann::json::number_float_t))
-class JsonSerialiser<T> {
+class Serialiser<T> {
 public:
     static bool Validate(const nlohmann::json& serialised)
     {
@@ -150,7 +150,7 @@ public:
  */
 template <std::signed_integral T>
 requires (sizeof(T) > sizeof(nlohmann::json::number_integer_t))
-class JsonSerialiser<T> {
+class Serialiser<T> {
     public:
     static bool Validate(const nlohmann::json& serialised)
     {
@@ -187,7 +187,7 @@ private:
  */
 template <std::unsigned_integral T>
 requires (sizeof(T) > sizeof(nlohmann::json::number_unsigned_t))
-class JsonSerialiser<T> {
+class Serialiser<T> {
     public:
     static bool Validate(const nlohmann::json& serialised)
     {
@@ -224,7 +224,7 @@ private:
  */
 template <std::floating_point T>
 requires (sizeof(T) > sizeof(nlohmann::json::number_float_t))
-class JsonSerialiser<T> {
+class Serialiser<T> {
 public:
     static bool Validate(const nlohmann::json& serialised)
     {
@@ -256,11 +256,11 @@ template <typename T>
 concept enumeration = std::is_enum_v<T>; // why isn't this in std?
 
 template <enumeration T>
-class JsonSerialiser<T> {
+class Serialiser<T> {
 public:
     static bool Validate(const nlohmann::json& serialised)
     {
-        return JsonSerialiser<std::underlying_type_t<T>>::Validate(serialised);
+        return Serialiser<std::underlying_type_t<T>>::Validate(serialised);
     }
 
     static nlohmann::json Serialise(const T& value)

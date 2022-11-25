@@ -37,7 +37,7 @@ concept SupportsNlohmannJsonSerialisation = requires (const nlohmann::json& cj, 
 };
 
 template <SupportsNlohmannJsonSerialisation T>
-class JsonSerialiser<T> {
+class Serialiser<T> {
 public:
     static bool Validate(const nlohmann::json&)
     {

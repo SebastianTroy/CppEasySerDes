@@ -27,7 +27,7 @@ TEST_CASE("Test MatchType")
     }
 }
 
-TEST_CASE("Test JsonSerialiser<T that SupportsNlohmannJsonSerialisation>")
+TEST_CASE("Test Serialiser<T that SupportsNlohmannJsonSerialisation>")
 {
     TypeThatSupportsNlohmannJsonSerialisation t { 42, "Foo" };
 

@@ -18,7 +18,7 @@ namespace esd {
 
 // Specialise for std::byte so that is is more user readable in JSON form
 template <>
-class JsonSerialiser<std::byte> {
+class Serialiser<std::byte> {
 public:
     static bool Validate(const nlohmann::json& serialised)
     {
@@ -47,19 +47,19 @@ public:
 };
 
 template <typename T1, typename T2>
-class JsonSerialiser<std::pair<T1, T2>> : public ClassHelper<std::pair<T1, T2>, T1, T2> {
+class Serialiser<std::pair<T1, T2>> : public ClassHelper<std::pair<T1, T2>, T1, T2> {
 public:
     // FIXME use "HelperType" when it supports templated types
     static void Configure()
     {
         // FIXME comment on this name lookup failure in the documentation (appears to only affect support for templated types)
-        JsonSerialiser::SetConstruction(JsonSerialiser::CreateParameter(&std::pair<T1, T2>::first),
-                                        JsonSerialiser::CreateParameter(&std::pair<T1, T2>::second));
+        Serialiser::SetConstruction(Serialiser::CreateParameter(&std::pair<T1, T2>::first),
+                                        Serialiser::CreateParameter(&std::pair<T1, T2>::second));
     }
 };
 
 template <typename... Ts>
-class JsonSerialiser<std::tuple<Ts...>> : public ClassHelper<std::tuple<Ts...>, Ts...> {
+class Serialiser<std::tuple<Ts...>> : public ClassHelper<std::tuple<Ts...>, Ts...> {
 public:
     // FIXME use "HelperType" when it supports templated types
     static void Configure()
@@ -71,7 +71,7 @@ private:
     template <std::size_t... Indexes>
     static void ConfigureInternal(std::index_sequence<Indexes...>)
     {
-        JsonSerialiser::SetConstruction(JsonSerialiser::CreateParameter([](const std::tuple<Ts...>& t)
+        Serialiser::SetConstruction(Serialiser::CreateParameter([](const std::tuple<Ts...>& t)
         {
             return std::get<Indexes>(t);
         }, "T" + std::to_string(Indexes)) ...);
@@ -79,7 +79,7 @@ private:
 };
 
 template <>
-class JsonSerialiser<std::string> {
+class Serialiser<std::string> {
 public:
     static bool Validate(const nlohmann::json& serialised)
     {
@@ -108,7 +108,7 @@ template <typename T>
 concept StringLikeConcept = std::ranges::range<T> && std::same_as<typename T::value_type, char> && PushBackableConcept<T>;
 
 template <StringLikeConcept T>
-class JsonSerialiser<T> {
+class Serialiser<T> {
 public:
     static bool Validate(const nlohmann::json& serialised)
     {
@@ -131,7 +131,7 @@ public:
 };
 
 template <std::ranges::range T>
-class JsonSerialiser<T> {
+class Serialiser<T> {
 public:
     static bool Validate(const nlohmann::json& serialised)
     {
@@ -154,7 +154,7 @@ public:
 };
 
 template <typename T, size_t N>
-class JsonSerialiser<std::array<T, N>> {
+class Serialiser<std::array<T, N>> {
 public:
     static bool Validate(const nlohmann::json& serialised)
     {
@@ -185,25 +185,25 @@ private:
 // Ideally support for those types would be completely encapsulated within their own headers
 
 template <typename T>
-concept TypeSupportedByEasySerDesViaClassHelper = IsDerivedFromSpecialisationOf<JsonSerialiser<T>, ClassHelper>;
+concept TypeSupportedByEasySerDesViaClassHelper = IsDerivedFromSpecialisationOf<Serialiser<T>, ClassHelper>;
 
 template <typename T>
-concept TypeSupportedByEasySerDesViaPolymorphicClassHelper = IsDerivedFromSpecialisationOf<JsonSerialiser<T>, PolymorphicClassHelper>;
+concept TypeSupportedByEasySerDesViaPolymorphicClassHelper = IsDerivedFromSpecialisationOf<Serialiser<T>, PolymorphicClassHelper>;
 
 template <typename T>
 requires TypeSupportedByEasySerDesViaClassHelper<T>
       || TypeSupportedByEasySerDesViaPolymorphicClassHelper<T>
       || requires (T, nlohmann::json j) { { std::make_shared<T>(esd::DeserialiseWithoutChecks<T>(j)) } -> std::same_as<std::shared_ptr<T>>; }
-class JsonSerialiser<std::shared_ptr<T>> {
+class Serialiser<std::shared_ptr<T>> {
 public:
     static bool Validate(const nlohmann::json& serialised)
     {
         bool valid = serialised.contains(wrappedTypeKey);
 
         if constexpr (TypeSupportedByEasySerDesViaPolymorphicClassHelper<T>) {
-            return valid && JsonSerialiser<T>::ValidatePolymorphic(serialised.at(wrappedTypeKey));
+            return valid && Serialiser<T>::ValidatePolymorphic(serialised.at(wrappedTypeKey));
         } else {
-            return valid && JsonSerialiser<T>::Validate(serialised.at(wrappedTypeKey));
+            return valid && Serialiser<T>::Validate(serialised.at(wrappedTypeKey));
         }
     }
 
@@ -213,9 +213,9 @@ public:
         std::uintptr_t pointerValue = reinterpret_cast<std::uintptr_t>(shared.get());
         serialisedPtr[uniqueIdentifierKey] = pointerValue;
         if constexpr (TypeSupportedByEasySerDesViaPolymorphicClassHelper<T>) {
-            serialisedPtr[wrappedTypeKey] = JsonSerialiser<T>::SerialisePolymorphic(*shared);
+            serialisedPtr[wrappedTypeKey] = Serialiser<T>::SerialisePolymorphic(*shared);
         } else {
-            serialisedPtr[wrappedTypeKey] = JsonSerialiser<T>::Serialise(*shared);
+            serialisedPtr[wrappedTypeKey] = Serialiser<T>::Serialise(*shared);
         }
         return serialisedPtr;
     }
@@ -225,9 +225,9 @@ public:
         std::shared_ptr<T> ret = CheckCache(serialised);
         if (!ret) {
             if constexpr (TypeSupportedByEasySerDesViaPolymorphicClassHelper<T>) {
-                ret = JsonSerialiser<T>::DeserialisePolymorphic(serialised.at(wrappedTypeKey));
+                ret = Serialiser<T>::DeserialisePolymorphic(serialised.at(wrappedTypeKey));
             } else if constexpr (TypeSupportedByEasySerDesViaClassHelper<T>) {
-                ret = JsonSerialiser<T>::Deserialise([](auto... args){ return std::make_shared<T>(args...); }, serialised.at(wrappedTypeKey));
+                ret = Serialiser<T>::Deserialise([](auto... args){ return std::make_shared<T>(args...); }, serialised.at(wrappedTypeKey));
             } else if constexpr (std::is_move_constructible_v<T> || std::is_copy_constructible_v<T>) {
                 ret = std::make_shared<T>(esd::DeserialiseWithoutChecks<T>(serialised.at(wrappedTypeKey)));
             }
@@ -285,16 +285,16 @@ template <typename T>
 requires TypeSupportedByEasySerDesViaClassHelper<T>
       || TypeSupportedByEasySerDesViaPolymorphicClassHelper<T>
       || requires (T, nlohmann::json j) { { std::make_unique<T>(esd::DeserialiseWithoutChecks<T>(j)) } -> std::same_as<std::unique_ptr<T>>; }
-class JsonSerialiser<std::unique_ptr<T>> {
+class Serialiser<std::unique_ptr<T>> {
 public:
     static bool Validate(const nlohmann::json& serialised)
     {
         bool valid = serialised.contains(wrappedTypeKey);
 
         if constexpr (TypeSupportedByEasySerDesViaPolymorphicClassHelper<T>) {
-            return valid && JsonSerialiser<T>::ValidatePolymorphic(serialised.at(wrappedTypeKey));
+            return valid && Serialiser<T>::ValidatePolymorphic(serialised.at(wrappedTypeKey));
         } else {
-            return valid && JsonSerialiser<T>::Validate(serialised.at(wrappedTypeKey));
+            return valid && Serialiser<T>::Validate(serialised.at(wrappedTypeKey));
         }
     }
 
@@ -303,9 +303,9 @@ public:
         nlohmann::json serialisedPtr = nlohmann::json::object();
 
         if constexpr (TypeSupportedByEasySerDesViaPolymorphicClassHelper<T>) {
-            serialisedPtr[wrappedTypeKey] = JsonSerialiser<T>::SerialisePolymorphic(*shared);
+            serialisedPtr[wrappedTypeKey] = Serialiser<T>::SerialisePolymorphic(*shared);
         } else {
-            serialisedPtr[wrappedTypeKey] = JsonSerialiser<T>::Serialise(*shared);
+            serialisedPtr[wrappedTypeKey] = Serialiser<T>::Serialise(*shared);
         }
 
         return serialisedPtr;
@@ -314,9 +314,9 @@ public:
     static std::unique_ptr<T> Deserialise(const nlohmann::json& serialised)
     {
         if constexpr (TypeSupportedByEasySerDesViaPolymorphicClassHelper<T>) {
-            return JsonSerialiser<T>::DeserialisePolymorphic(serialised.at(wrappedTypeKey));
+            return Serialiser<T>::DeserialisePolymorphic(serialised.at(wrappedTypeKey));
         } else if constexpr (TypeSupportedByEasySerDesViaClassHelper<T>) {
-            return JsonSerialiser<T>::Deserialise([](auto... args){ return std::make_unique<T>(args...); }, serialised.at(wrappedTypeKey));
+            return Serialiser<T>::Deserialise([](auto... args){ return std::make_unique<T>(args...); }, serialised.at(wrappedTypeKey));
         } else if constexpr (std::is_move_constructible_v<T> || std::is_copy_constructible_v<T>) {
             return std::make_unique<T>(esd::DeserialiseWithoutChecks<T>(serialised.at(wrappedTypeKey)));
         }

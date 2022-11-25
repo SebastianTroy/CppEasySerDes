@@ -40,7 +40,7 @@ namespace esd {
  * specialisation will fail to compile.
  */
 template <typename T>
-class JsonSerialiser;
+class Serialiser;
 
 /**
  * Anything that satisfies this concept is supported by this library.
@@ -61,7 +61,7 @@ concept JsonSerialserConcept = requires (const T& t, const nlohmann::json& s) {
  * an unsupported type is used with it.
  */
 template <typename T>
-concept TypeSupportedByEasySerDes = requires { JsonSerialiser<T>{}; } && std::same_as<T, std::remove_cvref_t<T>>;
+concept TypeSupportedByEasySerDes = requires { Serialiser<T>{}; } && std::same_as<T, std::remove_cvref_t<T>>;
 
 ///
 /// Forward Declare API functions
@@ -96,7 +96,7 @@ T DeserialiseWithoutChecks(const nlohmann::json& serialised);
 
 
 template <JsonSerialserConcept T>
-class JsonSerialiser<T> {
+class Serialiser<T> {
 public:
     static bool Validate(const nlohmann::json& serialised)
     {
@@ -115,7 +115,7 @@ public:
 };
 
 /**
- * Some JsonSerialiser<T> types may need to track information between distinct
+ * Some Serialiser<T> types may need to track information between distinct
  * user calls to Serialise or Deserialise (e.g. shared_ptr ideally should return
  * the same shared_ptr for repeat calls to Deserialise of the same serialised
  * shared_ptr).
@@ -148,20 +148,20 @@ private:
 template <typename T> requires TypeSupportedByEasySerDes<T>
 bool Validate(const nlohmann::json& serialised)
 {
-    return JsonSerialiser<T>::Validate(serialised);
+    return Serialiser<T>::Validate(serialised);
 }
 
 template <typename T> requires TypeSupportedByEasySerDes<T>
 nlohmann::json Serialise(const T& value)
 {
-    return JsonSerialiser<T>::Serialise(value);
+    return Serialiser<T>::Serialise(value);
 }
 
 template <typename T> requires TypeSupportedByEasySerDes<T>
 std::optional<T> Deserialise(const nlohmann::json& serialised)
 {
-    if (JsonSerialiser<T>::Validate(serialised)) {
-        return std::make_optional(JsonSerialiser<T>::Deserialise(serialised));
+    if (Serialiser<T>::Validate(serialised)) {
+        return std::make_optional(Serialiser<T>::Deserialise(serialised));
     } else {
         return std::nullopt;
     }
@@ -170,7 +170,7 @@ std::optional<T> Deserialise(const nlohmann::json& serialised)
 template <typename T> requires TypeSupportedByEasySerDes<T>
 T DeserialiseWithoutChecks(const nlohmann::json& serialised)
 {
-    return JsonSerialiser<T>::Deserialise(serialised);
+    return Serialiser<T>::Deserialise(serialised);
 }
 
 } // end namespace esd
