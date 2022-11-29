@@ -81,7 +81,7 @@ class Serialiser<T> {
     static bool Validate(const nlohmann::json& serialised)
     {
         using InternalType = nlohmann::json::number_integer_t;
-        return MatchType(serialised.type(), nlohmann::json::value_t::number_integer) && serialised.get<InternalType>() == static_cast<InternalType>(Deserialise(serialised));
+        return MatchType(nlohmann::json::value_t::number_integer, serialised.type()) && serialised.get<InternalType>() == static_cast<InternalType>(Deserialise(serialised));
     }
 
     static nlohmann::json Serialise(const T& value)
@@ -105,7 +105,7 @@ class Serialiser<T> {
     static bool Validate(const nlohmann::json& serialised)
     {
         using InternalType = nlohmann::json::number_unsigned_t;
-        return MatchType(serialised.type(), nlohmann::json::value_t::number_unsigned) && serialised.get<InternalType>() == static_cast<InternalType>(Deserialise(serialised));
+        return MatchType(nlohmann::json::value_t::number_unsigned, serialised.type()) && serialised.get<InternalType>() == static_cast<InternalType>(Deserialise(serialised));
     }
 
     static nlohmann::json Serialise(const T& value)
@@ -129,7 +129,7 @@ public:
     static bool Validate(const nlohmann::json& serialised)
     {
         using InternalType = nlohmann::json::number_float_t;
-        return MatchType(serialised.type(), nlohmann::json::value_t::number_float) && serialised.get<InternalType>() == static_cast<InternalType>(Deserialise(serialised));
+        return MatchType(nlohmann::json::value_t::number_float, serialised.type()) && serialised.get<InternalType>() == static_cast<InternalType>(Deserialise(serialised));
     }
 
     static nlohmann::json Serialise(const T& value)
