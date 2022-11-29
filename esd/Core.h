@@ -43,20 +43,6 @@ template <typename T>
 class Serialiser;
 
 /**
- * Anything that satisfies this concept is supported by this library.
- *
- * However there is a lot of boilerplate and code repetition required for
- * supporting your own types this way, it is mainly used to support built in
- * language types.
- */
-template <typename T>
-concept JsonSerialserConcept = requires (const T& t, const nlohmann::json& s) {
-    { T::Validate(s) } -> std::same_as<bool>;
-    { T::Serialise(t) } -> std::same_as<nlohmann::json>;
-    { T::Deserialise(s) } -> std::same_as<T>;
-};
-
-/**
  * Concept used to constrain the API and give more concise error messages when
  * an unsupported type is used with it.
  */
@@ -93,26 +79,6 @@ std::optional<T> Deserialise(const nlohmann::json& serialised);
  */
 template <typename T> requires TypeSupportedByEasySerDes<T>
 T DeserialiseWithoutChecks(const nlohmann::json& serialised);
-
-
-template <JsonSerialserConcept T>
-class Serialiser<T> {
-public:
-    static bool Validate(const nlohmann::json& serialised)
-    {
-        return T::Validate(serialised);
-    }
-
-    static nlohmann::json Serialise(const T& value)
-    {
-        return T::Serialise(value);
-    }
-
-    static T Deserialise(const nlohmann::json& serialised)
-    {
-        return T::Deserialise(serialised);
-    }
-};
 
 /**
  * Some Serialiser<T> types may need to track information between distinct

@@ -16,8 +16,8 @@ target_sources(Tests
     TestStdLibrarySupport.cpp
     TestClassHelper.h
     TestClassHelper.cpp
-    TestPolymorphicClassHelper.h
-    TestPolymorphicClassHelper.cpp
+    TestPolymorphismHelper.h
+    TestPolymorphismHelper.cpp
     TestJsonHelpers.h
     TestJsonHelpers.cpp
 )

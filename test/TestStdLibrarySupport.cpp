@@ -11,6 +11,8 @@
 #include <bitset>
 #include <array>
 #include <optional>
+#include <variant>
+#include <memory>
 
 using namespace nlohmann;
 
@@ -22,7 +24,7 @@ template <typename T, template <typename...> class Z>
 struct is_specialization_of : std::false_type {};
 template <typename... Args, template <typename...> class Z>
 struct is_specialization_of<Z<Args...>, Z> : std::true_type {};
-template<typename T, template <typename...> class Z>
+template <typename T, template <typename...> class Z>
 concept IsSpecialisationOf = is_specialization_of<T, Z>::value;
 
 template <typename T>
@@ -43,7 +45,10 @@ void RunTest(T value, json::value_t desiredStorageType = json::value_t::null)
         }
         // If a pointer type, we want to compare the values, not the pointer itself
         if constexpr (IsSpecialisationOf<T, std::shared_ptr> || IsSpecialisationOf<T, std::unique_ptr>) {
-            REQUIRE(*deserialised == *value);
+            if (value != nullptr) {
+                REQUIRE(deserialised != nullptr);
+                REQUIRE(*deserialised == *value);
+            }
         } else {
             REQUIRE(deserialised == value);
         }
@@ -55,10 +60,26 @@ void RunTest(T value, json::value_t desiredStorageType = json::value_t::null)
             REQUIRE(serialised.type() == desiredStorageType);
         }
     } else {
-        bool typeNotSupported = true;
-        REQUIRE(typeNotSupported);
+        bool typeSupported = false;
+        REQUIRE(typeSupported);
     }
 }
+
+template <typename T, typename InvalidType>
+requires std::same_as<InvalidType, nlohmann::json> || requires (InvalidType t) { { nlohmann::json(t) }; }
+void RunFailureTest(InvalidType invalidValue)
+{
+    REQUIRE(!esd::Validate<T>(invalidValue));
+    REQUIRE(esd::Deserialise<T>(invalidValue) == std::nullopt);
+}
+
+template <typename T, typename... InvalidValueTs>
+requires (... && (std::same_as<InvalidValueTs, nlohmann::json> || requires (InvalidValueTs t) { { nlohmann::json(t) }; } ))
+void RunFailureTest(InvalidValueTs... invalidValues)
+{
+    (RunFailureTest<T>(invalidValues), ...);
+}
+
 } // end anonymous namespace
 
 TEST_CASE("StdLibTypes", "[json]")
@@ -66,36 +87,46 @@ TEST_CASE("StdLibTypes", "[json]")
     SECTION("std::string")
     {
         RunTest<std::string>("Hello World!", json::value_t::string);
+        RunFailureTest<std::string>(14, true, 432.2346, -513, 54378u, std::vector<std::string>{ "Hello World!" });
     }
 
     SECTION("std::vector<char>")
     {
         RunTest<std::vector<char>>({ 'H', 'W', '!', '4', '2' }, json::value_t::string);
+        RunFailureTest<std::vector<char>>(14, true, 432.2346, -513, 54378u, std::vector<int>{ 43, -123, 543, -1435, 54 });
     }
 
     SECTION("std::deque<int>")
     {
         RunTest<std::deque<int>>({ 42, 79, 54326781, -541786, 0, -0, ~0 }, json::value_t::array);
+        RunFailureTest<std::deque<int>>(14, true, 432.2346, -513, 54378u, std::vector<float>{ 43.4532, -123.6432, 543.7832, -1435.005, 54.1 });
     }
 
     SECTION("std::vector<int>")
     {
         RunTest<std::vector<int>>({ 42, 79, 54326781, -541786, 0, -0, ~0 }, json::value_t::array);
+        RunFailureTest<std::vector<int>>(14, true, 432.2346, -513, 54378u, std::vector<float>{ 43.4532, -123.6432, 543.7832, -1435.005, 54.1 });
     }
 
     SECTION("std::set<int>")
     {
         RunTest<std::set<int>>({ 42, 79, 54326781, -541786, 0, -0, ~0 }, json::value_t::array);
+        RunFailureTest<std::set<int>>(14, true, 432.2346, -513, 54378u);
+        // ranges all treated generically, so no duplication detection for sets
+        // RunFailureTest<std::set<int>>(std::vector<int>{ 1, 1, 543, 2346, 7654, 2346 });
     }
 
     SECTION("std::array<int, 5>")
     {
-        RunTest<std::array<char, 5>>({ 1, 2, 3, 4, 5 }, json::value_t::array);
+        RunTest<std::array<int, 5>>({ 1, 2, 3, 4, 5 }, json::value_t::array);
+        RunFailureTest<std::array<int, 5>>(14, true, 432.2346, -513, 54378u, std::array<int, 6>{ 1, 1, 543, 2346, 7654, 2346 });
     }
 
     SECTION("std::bitset")
     {
-        RunTest<std::bitset<5>>({ std::bitset<5>{"10110"} }, json::value_t::array);
+        RunTest<std::bitset<5>>({ std::bitset<5>{"10110"} }, json::value_t::string);
+        RunTest<std::bitset<15>>({ std::bitset<15>{"10110101011111001100"} }, json::value_t::string);
+        RunFailureTest<std::bitset<5>>(14, "011010001", "78463287", "10210", true, 432.2346, -513, 54378u, std::array<int, 6>{ 1, 1, 543, 2346, 7654, 2346 });
     }
 
     SECTION("std::vector<std::string>")
@@ -123,6 +154,7 @@ TEST_CASE("StdLibTypes", "[json]")
         RunTest<std::byte>(std::byte{ 0b1010'1010 }, json::value_t::string);
         RunTest<std::byte>(std::byte{ 0xFF }, json::value_t::string);
         RunTest<std::byte>(std::byte{ 0x00 }, json::value_t::string);
+        RunFailureTest<std::byte>(0u, 256u, "00FF", "1xFF", "0x7C3", "014F");
     }
 
     SECTION("std::tuple")
@@ -134,15 +166,24 @@ TEST_CASE("StdLibTypes", "[json]")
 
     SECTION("std::optional")
     {
-        RunTest(std::make_optional(543), json::value_t::object);
-        RunTest(std::make_optional(std::string("FooBar")), json::value_t::object);
-        RunTest(std::nullopt, json::value_t::object);
+        RunTest(std::make_optional(543), json::value_t::number_integer);
+        RunTest(std::make_optional(std::string("FooBar")), json::value_t::string);
+        RunTest<std::optional<int>>(std::nullopt, json::value_t::string);
+    }
+
+    SECTION("std::variant")
+    {
+        RunTest<std::variant<int, bool, std::string>>(543, json::value_t::object);
+        RunTest<std::variant<int, bool, std::string>>(std::string("FooBar"), json::value_t::object);
+        RunTest<std::variant<int, bool, std::string>>(true, json::value_t::object);
+        RunFailureTest<std::variant<int, bool, std::string>>(42.12345, 12345.432f);
     }
 
     SECTION("std::shared_ptr")
     {
         RunTest(std::make_shared<int>(42), json::value_t::object);
         RunTest(std::make_shared<std::tuple<int, char, double>>(42, 'f', 0.314), json::value_t::object);
+        RunTest(std::shared_ptr<int>(nullptr), json::value_t::object);
 
         SECTION("Preserve sharedness")
         {
@@ -277,7 +318,8 @@ TEST_CASE("StdLibTypes", "[json]")
 
     SECTION("std::unique_ptr")
     {
-        RunTest(std::make_unique<int>(42));
-        RunTest(std::make_unique<std::tuple<int, char, double>>(42, 'f', 0.314));
+        RunTest(std::make_unique<int>(42), json::value_t::number_integer);
+        RunTest(std::make_unique<std::tuple<int, char, double>>(42, 'f', 0.314), json::value_t::object);
+        RunTest(std::unique_ptr<int>(nullptr), json::value_t::string);
     }
 }

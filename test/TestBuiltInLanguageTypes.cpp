@@ -91,7 +91,7 @@ TEST_CASE("BuiltInTypes", "[json]")
         RunTest<int>(std::numeric_limits<int>::max(), json::value_t::number_integer);
         RunTest<int>(std::numeric_limits<int>::lowest(), json::value_t::number_integer);
 
-        RunFailureTest<int>("Foo", static_cast<unsigned char>('f'), false, static_cast<long long int>(std::numeric_limits<int>::min()) - 1, static_cast<long long int>(std::numeric_limits<int>::max()) + 1);
+        RunFailureTest<int>("Foo", 0.123423f, 43872687.34634, -432.12355f, false, static_cast<long long int>(std::numeric_limits<int>::min()) - 1, static_cast<long long int>(std::numeric_limits<int>::max()) + 1);
 
     }
 
@@ -129,7 +129,7 @@ TEST_CASE("BuiltInTypes", "[json]")
         RunTest<float>(std::numeric_limits<float>::denorm_min(), json::value_t::number_float);
         RunTest<float>(std::numeric_limits<float>::round_error(), json::value_t::number_float);
 
-        RunFailureTest<float>(false, 'c', -'h', "Foo", json::parse("[ 6473224456568735.564334542566425626 ]").at(0), json::parse("[ -8572424565634268527.32424568345756 ]").at(0));
+        RunFailureTest<float>(false, "Foo", json::parse("[ 6473224456568735.564334542566425626 ]").at(0), json::parse("[ -8572424565634268527.32424568345756 ]").at(0));
     }
 
     SECTION("double")
@@ -144,7 +144,7 @@ TEST_CASE("BuiltInTypes", "[json]")
         RunTest<double>(std::numeric_limits<double>::denorm_min(), json::value_t::number_float);
         RunTest<double>(std::numeric_limits<double>::round_error(), json::value_t::number_float);
 
-        RunFailureTest<double>(false, 'c', -'h', "Foo");
+        RunFailureTest<double>(false, "Foo");
         // The following don't fail because the library just slices the values down to valid doubles
         // json::parse("[ 64732244235.567483298574645245664334542543266425626 ]").at(0)
         // json::parse("[ -85724245656342682346527.32234565426424568323445756 ]").at(0)
@@ -166,7 +166,7 @@ TEST_CASE("BuiltInTypes", "[json]")
         RunTest<long double>(std::numeric_limits<long double>::denorm_min(), json::value_t::string);
         RunTest<long double>(std::numeric_limits<long double>::round_error(), json::value_t::string);
 
-        RunFailureTest<long double>(false, 'c', -'h', "Foo", json::parse("[ \"647322454235.5674832985746452456643345425432664256260\" ]").at(0), json::parse("[ \"-857242545656342682346527.322345654264245683234457560\" ]").at(0));
+        RunFailureTest<long double>(false, "Foo", json::parse("[ \"647322454235.5674832985746452456643345425432664256260\" ]").at(0), json::parse("[ \"-857242545656342682346527.322345654264245683234457560\" ]").at(0));
     }
 
     SECTION("enum")

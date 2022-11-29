@@ -130,7 +130,7 @@ std::ostream& operator<<(std::ostream& ostr, const NestedTestType& value)
 
 namespace esd {
 
-template<>
+template <>
 class Serialiser<TrivialTestType> : public ClassHelper<TrivialTestType, int, std::vector<int>, std::string> {
 public:
     static void Configure()
@@ -141,7 +141,7 @@ public:
     }
 };
 
-template<>
+template <>
 class Serialiser<NonTrivialTestType> : public ClassHelper<NonTrivialTestType, int> {
 public:
     static void Configure()
@@ -151,7 +151,7 @@ public:
     }
 };
 
-template<>
+template <>
 class Serialiser<InitialisedTestType> : public ClassHelper<InitialisedTestType> {
 public:
     static void Configure()
@@ -163,7 +163,7 @@ public:
     }
 };
 
-template<>
+template <>
 class Serialiser<NestedTestType> : public ClassHelper<NestedTestType, NonTrivialTestType> {
 public:
     static void Configure()

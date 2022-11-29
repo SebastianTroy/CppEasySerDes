@@ -493,8 +493,8 @@ public:
     }
 
     ///
-    /// Supply additional Deserialise overloads to allow building in place
-    /// ------------------------------------------------------------------
+    /// DeserialiseInPlace
+    /// ------------------
     ///
     /// The intent here is to allow advanced users to re-use all of the code
     /// here for constructing a user type, but to construct that user type via
@@ -513,7 +513,8 @@ public:
     /// It is also important to note that these will almost always be used in a
     /// templated setting, where the user-type is unknown, and therefore the
     /// construction arguments are also unknown. This can be side-stepped by
-    /// passing a templated lambda `[](auto... args){ return factory(args...); }`
+    /// passing a templated lambda as the `factory` parameter:
+    /// `[](auto... args){ return factory<T>(args...); }`
     ///
 
     /**
@@ -525,7 +526,7 @@ public:
      */
     template <typename Invocable>
     requires std::is_invocable_v<Invocable, ConstructionArgs...>
-    [[nodiscard]] static auto Deserialise(Invocable factory, const nlohmann::json& toDeserialise) -> ReturnTypeNoCVRef<Invocable, ConstructionArgs...>
+    [[nodiscard]] static auto DeserialiseInPlace(Invocable factory, const nlohmann::json& toDeserialise) -> ReturnTypeNoCVRef<Invocable, ConstructionArgs...>
     {
         return helper_.Deserialise(std::forward<Invocable>(factory), toDeserialise);
     }
@@ -544,7 +545,7 @@ public:
      */
     template <typename Invocable>
     requires std::is_invocable_v<Invocable, ConstructionArgs...>
-    [[nodiscard]] static auto Deserialise(Invocable factory, const std::function<T* (ReturnTypeNoCVRef<Invocable, ConstructionArgs...>&)>& accessResultFromFactoryOutput, const nlohmann::json& toDeserialise) -> ReturnTypeNoCVRef<Invocable, ConstructionArgs...>
+    [[nodiscard]] static auto DeserialiseInPlace(Invocable factory, const std::function<T* (ReturnTypeNoCVRef<Invocable, ConstructionArgs...>&)>& accessResultFromFactoryOutput, const nlohmann::json& toDeserialise) -> ReturnTypeNoCVRef<Invocable, ConstructionArgs...>
     {
         return helper_.Deserialise(std::forward<Invocable>(factory), accessResultFromFactoryOutput, toDeserialise);
     }
@@ -554,6 +555,23 @@ private:
     static inline HelperType helper_ = [](){ HelperType h; Serialiser<T>::Configure(); return h; }();
 };
 
+// anonymous namespace to hide concepts used only for the HasClassHelperSpecialisation<T> concept
+namespace {
+    // https://stackoverflow.com/questions/70130735/c-concept-to-check-for-derived-from-template -specialization
+    template <template <class...> class Z, class... Args>
+    void is_derived_from_specialization_of(const Z<Args...>&);
+
+    template <class T, template <class...> class Z>
+    concept IsDerivedFromSpecialisationOf = requires(const T& t) {
+        is_derived_from_specialization_of<Z>(t);
+    };
+} // end anonymous namespace
+
+// FIXME would be nicer to have this at the top!
+template <typename T>
+concept HasClassHelperSpecialisation = IsDerivedFromSpecialisationOf<Serialiser<T>, ClassHelper>;
+
+// anonymous namespace to hide the InternalHelper
 namespace {
 
 ///
@@ -669,8 +687,12 @@ public:
             for (const auto& [ key, jsonValue ] : json.items()) {
                 if (variables_.count(key) == 1) {
                     if (!variables_.at(key).validator_(jsonValue)) {
+                        // Value's custom validator failed
                         valid = false;
                     }
+                } else {
+                    // Invalid key detected
+                    valid = false;
                 }
             }
         }
@@ -686,7 +708,7 @@ public:
     {
         constructor_ = [=](const nlohmann::json& serialised) -> T
         {
-            return { (esd::DeserialiseWithoutChecks<std::remove_cvref_t<ConstructionArgs>>(serialised.at(params.parameterKey_)))... };
+            return T{ esd::DeserialiseWithoutChecks<std::remove_cvref_t<ConstructionArgs>>(serialised.at(params.parameterKey_))... };
         };
 
         (this->constructionVariables_.push_back(params.parameterKey_), ...);

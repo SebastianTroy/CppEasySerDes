@@ -25,9 +25,12 @@ A library for easy conversion of C++ types to/from JSON, allowing for a concise 
      - [RegisterVariable](#esdClassHelperRegisterVariable)
      - [DefinePostSerialiseAction](#esdClassHelperDefinePostSerialiseAction)
      - [DefinePostDeserialiseAction](#esdClassHelperDefinePostDeserialiseAction)
-     - [Deserialise (overloads for building in-place)](#esdClassHelperDeserialise-overloads)
-   - [esd::PolymorphicClassHelper](#esdPolymorphicClassHelper)
-     - [SetChildTypes](#esdPolymorphicClassHelperSetChildTypes)
+     - [DeserialiseInPlace](#esdClassHelperDeserialiseInPlace)
+   - [esd::PolymorphismHelper](#esdPolymorphismHelper)
+     - [IsDerivedType](#esdPolymorphismHelperIsPolymorphic)
+     - [ValidatePolymorphic](#esdPolymorphismHelperValidatePolymorphic)
+     - [SerialisePolymorphic](#esdPolymorphismHelperSerialisePolymorphic)
+     - [DeserialisePolymorphic](#esdPolymorphismHelperDeserialisePolymorphic)
  - [TODO](#TODO)
 
 ## Disclaimer
@@ -46,7 +49,7 @@ I'm not a proud person, if I've made wildly inaccurate claims, or my implementat
 nlohmann::json already has its own support for custom types... why re-invent the wheel in a perfectly servicable wheel?
  - A lot of solutions for this problem require you define two functions, a reader and a writer. These are often identical functions but in reverse and must be maintained in tandem, violating the DRY principle.
  - Adding validation or constraints to the acceptable values stored sucks because you need to add the same checks to both the writer and the reader functions.
- - When using a storage structure like JSON, you must now either create variables for each key, so they an be shared between the reader/writer functions, or carefully use the same magic values in both.
+ - When using a storage structure like JSON, you must now either create variables for each key, so they can be shared between the reader/writer functions, or carefully use the same magic values in both.
  - And now you want to deserialise it into a smart pointer without copying, or emplace_back into an array? Well you'll have to duplicate your deserialisation function!
 
 [Back to Index](#Table-of-Contents)
@@ -98,6 +101,7 @@ target_link_libraries(<InsertYourProjectNameHere>
 -----------
 
 ### Using the Library
+---------------------
 
 A theoretical save game system may look like the following:
 ````C++
@@ -134,7 +138,7 @@ void LoadGame(const std::string& filename)
 ````
 
 ### Supporting A Trivial Type
------------------
+-----------------------------
 
 This is intended to be the most common use case. The following example demonstrates how you would use the esd::ClassHelper to support a struct, and optionally assign a label and/or additional validation to each struct member variable.
 ````C++
@@ -144,7 +148,7 @@ struct TrivialType {
     std::string c_;
 };
 
-template<>
+template <>
 struct esd::Serialiser<TrivialType> : public esd::ClassHelper<TrivialType, int, std::vector<int>, std::string> {
     static void Configure()
     {
@@ -159,7 +163,7 @@ struct esd::Serialiser<TrivialType> : public esd::ClassHelper<TrivialType, int, 
 [Back to Index](#Table-of-Contents)
 
 ### Supporting A Complex Type
--------------------------
+-----------------------------
 
 A contrived example to show off more features. 
 ````C++
@@ -190,7 +194,7 @@ private:
     TrivialType d_;
 };
 
-template<>
+template <>
 class esd::Serialiser<ContrivedType> : public esd::ClassHelper<ContrivedType, int> {
 public:
     static void Configure()
@@ -225,106 +229,96 @@ public:
 
 [Back to Index](#Table-of-Contents)
 
+## Supporting Templated Types
+-------------------------------
+
+This is identical to supporting a trivial or complex type, except function-name lookup can be problematic. To combat this you can use:
+````C++
+template <typename T>
+struct TemplatedType {
+    T value_;
+    TemplatedType(T&& value);
+};
+
+template <typename T>
+struct esd::Serialiser<TemplatedType<T>> : public esd::ClassHelper<TemplatedType, T> {
+    static void Configure()
+    {
+        // `using` allows us to compress the typename for cases where it is very verbose
+        using This = Serialiser<TemplatedType<T>>;
+        
+        // Apart from the prefix, `ClassHelper` functions can now be called normally
+        This::SetConstruction(This::CreateParameter(&TemplatedType::value_));
+    }
+};
+````
+
+[Back to Index](#Table-of-Contents)
+
 ## Supporting Polymorphic Types
 -------------------------------
 
-And finally some examples showing how to support polymorphism.
-First some polymorphic types to support:
+And finally some examples showing how to support polymorphism. The class and `esd::Serialiser` specialisation implementation details have been ommited for brevity.
+
+The polymorphic types to support:
 
 ````C++
-class ParentType {
-public:
-    int a_;
-    virtual ~ParentType() {}
-};
+class ParentType;
 ````
 ````C++
-class ChildTypeA : public ParentType {
-public:
-    ChildTypeA(bool b);
-    virtual ~ChildTypeA() {}
-    
-    bool GetB() const;
-    
-private:
-    bool b_;
-};
+class ChildTypeA : public ParentType;
 ````
 ````C++
-class ChildTypeB : public ParentType {
-public:
-    ChildTypeB(std::string s);
-    virtual ~ChildTypeB() {}
-
-    std::string GetS() const;
-    
-private:
-    std::string s_;
-};
+class ChildTypeB : public ParentType;
 ````
 ````C++
-class GrandChildType : public ChildTypeA {
-public:
-    int i_;
-    GrandChildType(int i);
-    virtual ~GrandChildType() {}
-};
+class GrandChildType : public ChildTypeA;
 ````
 
-Next we need to implement their `Serialiser`s. Note that they are implemented in reverse order.
+Each type needs to have a `Serialiser` specialisation. This step is identical to supporting non-polymorphic types.
+
+If a specialisation already exists (e.g. your type has nlohmann::json's own `to_json` and `from_json` support, or is a container) then you don't need to define your own specialisation.
 
 ````C++
-template<>
-class esd::Serialiser<GrandChildType> : public esd::PolymorphicClassHelper<GrandChildType, int> {
-public:
-    static void Configure()
-    {
-        SetConstruction(CreateParameter(&GrandChildType::i_));
-    }
-};
-
-template<>
-class esd::Serialiser<ChildTypeA> : public esd::PolymorphicClassHelper<ChildTypeA, bool> {
-public:
-    static void Configure()
-    {
-        SetConstruction(CreateParameter(&ChildTypeA::GetB));
-        SetChildTypes<GrandChildType>();
-    }
-};
-
-template<>
-class esd::Serialiser<ChildTypeB> : public esd::PolymorphicClassHelper<ChildTypeB, std::string> {
-public:
-    static void Configure()
-    {
-        SetConstruction(CreateParameter(&ChildTypeB::GetS));
-    }
-};
-
-template<>
-class esd::Serialiser<ParentType> : public esd::PolymorphicClassHelper<ParentType, int> {
-public:
-    static void Configure()
-    {
-        SetConstruction(CreateParameter(&ParentType::a_));
-        SetChildTypes<ChildTypeA, ChildTypeB>();
-
-        // As ParentType is default constructable, We could also have specified 
-        // no construction params, not registered the construction and instead
-        // called `RegisterVariable(&ParentType::a_);`
-    }
-};
+template <>
+class esd::Serialiser<ParentType> : public esd::ClassHelper<ParentType, int>;
+````
+````C++
+template <>
+class esd::Serialiser<ChildTypeA> : public esd::ClassHelper<ChildTypeA, bool>;
+````
+````C++
+template <>
+class esd::Serialiser<ChildTypeB>; // Extending ClassHelper is completely optional (though advised!)
+````
+````C++
+template <>
+class esd::Serialiser<GrandChildType> : public esd::ClassHelper<GrandChildType, int>;
 ````
 
-And finally, to Serialise and Deserialise these types, you have three options:
-Firstly, when using the types directly, you have to be careful of slicing:
+To support the polymorphic aspect we can just add the following definition. (Polymorphism is only supported via smart pointers)
+
+````C++
+namespace esd {
+    template <IsChildOf<BaseType> T>
+    class PolymorphismHelper<T> : public PolymorphicSet<T, BaseType, ChildTypeA, ChildTypeB, GrandChildType>{}
+}
+
+// Note that the following leads to "template`esd::PolymorphismHelper<T>` redefinition" errors with my GCC compiler.
+// template <esd::IsChildOf<BaseType> T>
+// class esd::PolymorphismHelper<T> : public esd::PolymorphicSet<T, BaseType, ChildTypeA, ChildTypeB, GrandChildType>{}
+````
+
+To Serialise and Deserialise these types, you have three options:
+**Firstly**, Non-polymorphically. When using the types directly, you have to be careful of slicing:
 
 ````C++
 ChildTypeA childInstance{ 42 };
 nlohmann::json serialised = esd::Serialise(p);
-// Uhoh, we've just sliced. Our parentInstance vtable will be invalid
+// Uhoh, we've just sliced, all child typeness has been lost
 ParentType parentInstance = esd::DeserialiseWithoutChecks<ChildTypeA>(serialised);
+// This is still fine though
+ChildTypeA deserialisedChildInstance = esd::DeserialiseWithoutChecks<ChildTypeA>(serialised);
 ````
 
 The following wont work because they are trying to reference/point at a tempory
@@ -334,14 +328,14 @@ ParentType& parentInstance = esd::DeserialiseWithoutChecks<ChildTypeA>(serialise
 ParentType* parentInstance = &esd::DeserialiseWithoutChecks<ChildTypeA>(serialised);
 ````
 
-The following won't work because we haven't defined `Serialiser<ChildTypeA&>` or `Serialiser<ChildTypeA*>` (nor should we!)
+The following won't work because `Serialiser<ChildTypeA&>` and `Serialiser<ChildTypeA*>` are not defined (and shouldn't be).
 
 ````C++
 ParentType& parentInstance = esd::DeserialiseWithoutChecks<ChildTypeA&>(serialised);
 ParentType* parentInstance = esd::DeserialiseWithoutChecks<ChildTypeA*>(serialised);
 ````
 
-Secondly, the intended usage is via smart pointers
+**Secondly**, polymorphically, the intended usage is via smart pointers
 
 ````C++
 std::shared_ptr<ParentType> originalSharedInstance = std::make_shared<GrandChildType>(79);
@@ -359,28 +353,31 @@ nlohmann::json serialised = esd::Serialise(originalUniqueInstance);
 std::unique_ptr<ParentType> deserialisedUniqueInstance = esd::DeserialiseWithoutChecks<std::unique_ptr<ParentType>>(serialised);
 ````
 
-Something to note is that the serialised forms of `unique_ptr<T>` and `shared_ptr<T>` are not compatable
+Something to note is that the serialised forms of `unique_ptr<T>` and `shared_ptr<T>` are not cross-compatable
 
 ````C++
 std::unique_ptr<ParentType> originalUniqueInstance = std::make_unique<GrandChildType>(79);
 nlohmann::json serialisedUniquePtr = esd::Serialise(originalUniqueInstance);
+
 // Evaluates to false
 esd::Validate<std::shared_ptr<ParentType>>(serialisedUniquePtr);
+
 // Terminates execution
 // std::shared_ptr<ParentType> deserialisedUniqueInstance = esd::DeserialiseWithoutChecks<std::shared_ptr<ParentType>>(serialised);
+
 // Works because a shared_ptr can be constructed/assigned from a unique_ptr
 std::shared_ptr<ParentType> deserialisedUniqueInstance = esd::DeserialiseWithoutChecks<std::unique_ptr<ParentType>>(serialised);
 ````
 
-Thirdly, via the esd::JsonPolymorphicClassHelper ValidatePolymorphic, SerialisePolymorphic, and DeserialisePolymorphic functions (The same would work with unique_ptr)
+**Thirdly**, polymorphically via the `esd::PolymorphismHelper<T>::` `ValidatePolymorphic`, `SerialisePolymorphic`, and `DeserialisePolymorphic` functions (The same would work with unique_ptr)
 
 ````C++
 std::shared_ptr<ParentType> originalSharedInstance = std::make_shared<GrandChildType>(79);
 nlohmann::json serialised = esd::Serialise(originalSharedInstance);
 // This DOES NOT point to the same instance as originalSharedInstance
-std::shared_ptr<ParentType> deserialisedSharedInstance = esd::PolymorphicClassHelper<GrandChildType, int>::DeserialisePolymorphic(serialised);
+std::shared_ptr<ParentType> deserialisedSharedInstance = esd::PolymorphismHelper<GrandChildType>::DeserialisePolymorphic(serialised);
 // This DOES NOT point to the same instance as deserialisedSharedInstance (the shared_ptr tracking is done inside the `Serialiser<std::shared_ptr<...>>` specialisation)
-std::shared_ptr<ParentType> anotherSharedInstance = esd::PolymorphicClassHelper<GrandChildType, int>::DeserialisePolymorphic(serialised);
+std::shared_ptr<ParentType> anotherSharedInstance = esd::PolymorphismHelper<GrandChildType>::DeserialisePolymorphic(serialised);
 ````
 
 [Back to Index](#Table-of-Contents)
@@ -415,8 +412,8 @@ nlohmann::json Serialise(const T& value);
 
 [Back to Index](#Table-of-Contents)
 
-#### Deserialise
-----------------
+##### Deserialise
+-----------------
 
  If `esd::Validate<T>(serialised)` returns true, the returned optional will contain a valid instance of type T, else it will be equal to `std::nullopt`.
 ````C++
@@ -426,10 +423,11 @@ std::optional<T> Deserialise(const nlohmann::json& serialised);
 
 [Back to Index](#Table-of-Contents)
 
-#### DeserialiseWithoutChecks
------------------------------
+##### DeserialiseWithoutChecks
+------------------------------
 
-`Validate<T>(serialised)` is not called, and should be first called by the user. If the json cannot be succesfully converted into an instance of type T the program will halt. This is useful for cases where the end type cannot easily be extracted from a `std::optional<T>`.
+`Validate<T>(serialised)` is not called, and should be first called by the user. If the json cannot be succesfully converted into an instance of type T the program will halt.
+This may be useful for cases where type `T` cannot copied or moved out of a `std::optional<T>`.
 ````C++
 template <typename T> requires TypeSupportedByEasySerDes<T>
 T DeserialiseWithoutChecks(const nlohmann::json& serialised);
@@ -438,13 +436,13 @@ T DeserialiseWithoutChecks(const nlohmann::json& serialised);
 [Back to Index](#Table-of-Contents)
 
 ### esd::Serialiser
------------------------
+-------------------
 
 For any of your types to be supported by this library, you must create a specialisation of the following templated type.
 Every esd::Serialiser must implement a static Validate, Serialise and Deserialise function.
-It is **NOT RECOMMENDED** that you support your types directly like this, see esd::ClassHelper and esd::PolymorphicClassHelper below!
+It is **NOT RECOMMENDED** that you support your types directly like this, see `esd::ClassHelper`.
 ````C++
-template<>
+template <>
 class esd::Serialiser<T> {
 public:
     static bool Validate(const nlohmann::json& serialised);
@@ -456,19 +454,19 @@ public:
 [Back to Index](#Table-of-Contents)
 
 ### esd::ClassHelper
-----------------------------
+--------------------
 
 To make use of the `ClassHelper` you publically extend it when you are implementing an esd::Serialiser.
 It already defines the Validate, Serialise and Deserialise functions for you, so all that remains is to define a static Configure function as below.
 ````C++
-template<>
+template <>
 class esd::Serialiser<T> : public esd::ClassHelper<T, ConstructionParameterTypes...> {
 public:
     static void Configure();
 };
 ````
 #### esd::ClassHelper::SetConstruction
----------------------------------------------------
+--------------------------------------
 
 This **MUST** be called if your type is not default constructable, or if your type is default constructable and has an alternative constructor that you would like to use.
 **Repeated calls to this function simply overwrite previous calls.**
@@ -510,7 +508,7 @@ SetConstruction([](int i, const std::string& s){ return i < s.size(); }, CreateP
 [Back to Index](#Table-of-Contents)
 
 #### esd::ClassHelper::AddInitialisationCall
------------------------------------------------------
+--------------------------------------------
 
 Some types may not complete their initialisation within a constructor, but instead require a subsequent call to some initialise function.
 As many initialise calls can be registered as necessary.
@@ -554,7 +552,7 @@ AddInitialisationCall([](bool b, const std::string& s){ return b == s.empty(); }
 [Back to Index](#Table-of-Contents)
 
 #### esd::ClassHelper::CreateParameter
-----------------------------------------------
+--------------------------------------
 
 This function is used with both `SetConstruction` and `AddInitialisationCall`, as both require `0` or more `CreateParameter` return types as input.
 The role of this function is to tell the library how to get the values needed to construct our type and call any initialise functions.
@@ -627,7 +625,7 @@ CreateParam([](const T& instance) -> std::pair<int, int> { return std::make_pair
 [Back to Index](#Table-of-Contents)
 
 #### esd::ClassHelper::RegisterVariable
-----------------------------------------------
+---------------------------------------
 
 Some types may have member variables that are not set via a constructor or initialise function, and therefore need to be dealt with seperately.
 There are a few overloads, which are similar to `CreateParameter`, except that we also need to specify a `setter` as well as the `getter`.
@@ -711,7 +709,7 @@ RegisterVariable(std::move(getter), std::move(setter), "min-max", std::move(vali
 [Back to Index](#Table-of-Contents)
 
 #### esd::ClassHelper::DefinePostSerialiseAction
---------------------------------------------------------
+------------------------------------------------
 
 This function is included alongside `DefinePostDeserialiseAction` to allow complete flexibility. It is not intended that these functions be used often.
 
@@ -726,7 +724,7 @@ void DefinePostSerialiseAction(std::function<void (const T&, nlohmann::json&)>&&
 [Back to Index](#Table-of-Contents)
 
 #### esd::ClassHelper::DefinePostDeserialiseAction
-----------------------------------------------------------
+--------------------------------------------------
 
 This function is included alongside `DefinePostSerialiseAction` to allow complete flexibility. It is not intended that these functions be used often.
 
@@ -740,38 +738,39 @@ void DefinePostDeserialiseAction(std::function<void (const nlohmann::json&, T&)>
 
 [Back to Index](#Table-of-Contents)
 
-#### esd::ClassHelper::Deserialise overloads
+#### esd::ClassHelper::DeserialiseInPlace
+-----------------------------------------
 
-Additional overloads are provided for `Deserialise`, and while they are not utilised by `esd::Deserialise` or `esd::DeserialiseWithoutChecks`, they can be used manually by calling `Serialiser<T>::Deserialise(...)` where `T` has a corresponding `Serialiser` specialisation that extends `ClassHelper<T, ConstructionArgs...>`.
+These additional deserialise functions are not utilised by `esd::Deserialise` or `esd::DeserialiseWithoutChecks`, but can be used manually by calling `Serialiser<T>::DeserialiseInPlace(...)` where `T` has a corresponding `Serialiser` specialisation that extends `ClassHelper<T, ConstructionArgs...>`.
 
 In all cases, it is important that the instance of `T` created by the factory is accessible to `ClassHelper`, even if the factory doesn't return an instance directly.
 
-The first overload is for cases where the `factory` returns an instance directly, or the result can be de-referenced, e.g. an iterator, or smart pointer.
+The **first overload** is for cases where the `factory` returns an instance directly, or the result can be de-referenced, e.g. an iterator, or smart pointer.
 
 ````C++
-auto Deserialise(Invocable factory, const nlohmann::json& toDeserialise)
+auto DeserialiseInPlace(Invocable factory, const nlohmann::json& toDeserialise)
 ````
 
-The second overload is for when the `factory` doesn't return an instance, or something that can be dereferenced into an instance. Instead the user must also provide a `accessResultFromFactoryOutput` parameter, which is a function that takes the output of the `factory` and returns the instance of `T` that was just created.
+The **second overload** is for when the `factory` doesn't return an instance, or something that can be dereferenced into an instance. Instead the user must also provide a `accessResultFromFactoryOutput` parameter, which is a function that takes the output of the `factory` and returns the instance of `T` that was just created.
 
 Note that `factory` may not return anything, or something that has no way to return an instance of `T`, in this case you'll need to use lambda capture.
 
 ````C++
-auto Deserialise(Invocable factory, const std::function<T* (FactoryReturnType&)>& accessResultFromFactoryOutput, const nlohmann::json& toDeserialise)
+auto DeserialiseInPlace(Invocable factory, const std::function<T* (FactoryReturnType&)>& accessResultFromFactoryOutput, const nlohmann::json& toDeserialise)
 ````
 
-Now in cases where we know the type in question, and the construction args we could call
+Now in cases where we know the type in question, and the construction args we could call the following to create a `shared_ptr<T>`
 ````C++
 struct T { int i; double d; };
 nlohmann::json serialised = ...;
-Serialiser<T>::Deserialise(std::make_shared<T, int, double>, serialised);
+Serialiser<T>::DeserialiseInPlace(std::make_shared<T, int, double>, serialised);
 ````
 
-There is however a small problem, we cannot pass `std::make_shared` as a template parameter, or an argument... `&std::make_shared<T>` could be passed because it is a fully formed function pointer, but note that in this case we are limiting ourselves to default constructable types. `std::make_shared<T>(32)` is actually deduced as `std::make_shared<T, int>(32)` by the compiler! Instead we need to let the compiler deduce the types for us using a templated lambda:
+There is however a small problem, we cannot pass `std::make_shared` as a templateparameter, or an argument... `&std::make_shared<T>` could be passed because it is a fully formed function pointer, but note that in this case we are limiting ourselves to default constructable types. `std::make_shared<T>(32)` is actually deduced as `std::make_shared<T, int>(32)` by the compiler! Instead we need to let the compiler deduce the types for us using a templated lambda:
 ````C++
 template <typename T>
 nlohmann::json serialised = ...;
-Serialiser<T>::Deserialise([](auto... args){ return factory<T>(args...); }, serialised);
+Serialiser<T>::DeserialiseInPlace([](auto... args){ return factory<T>(args...); }, serialised);
 ````
 
 An example of this can be seen in the `std::shared_ptr` and `std::unique_ptr` specialisations, where `std::make_shared` and `std::make_unique` are used respectively.
@@ -779,44 +778,51 @@ An example of this can be seen in the `std::shared_ptr` and `std::unique_ptr` sp
 The following code has been cut down for this demonstration.
 ````C++
 template <typename T>
-class Serialiser<std::shared_ptr<T>> {
+class esd::Serialiser<std::shared_ptr<T>> {
 public:
     static std::shared_ptr<T> Deserialise(const nlohmann::json& serialised)
     {
-        if constexpr (TypeSupportedByEasySerDesViaClassHelper<T>) {
-            return Serialiser<T>::Deserialise([](auto... args){ return std::make_shared<T>(args...); }, serialised.at(wrappedTypeKey));
+        if constexpr (esd::HasClassHelperSpecialisation<T>) {
+            return esd::Serialiser<T>::DeserialiseInPlace([](auto... args){ return std::make_shared<T>(args...); }, serialised.at(wrappedTypeKey));
         }
     }
 ````
 
 [Back to Index](#Table-of-Contents)
 
-### esd::PolymorphicClassHelper
+### esd::PolymorphismHelper
 ---------------------------------------
 
-To make use of the `PolymorphicClassHelper` you publically extend it when you are implementing an esd::Serialiser.
-It it an extension of `ClassHelper` so it already defines the Validate, Serialise and Deserialise functions for you, and you implement the same static Configure function as below.
+To allow the library to treat polymorphic types correctly, you must define a `PolymorphismHelper` for each polymorphic type. This is achieved by defining a template specialisation that specialises for more than a songle type at a time.
+
+The long way to do this is:
 ````C++
-template<>
-class esd::Serialiser<T> : public esd::PolymorphicClassHelper<T, ConstructionParameterTypes...> {
-public:
-    static void Configure();
-};
+namespace esd {
+    class PolymorphismHelper<BaseType> : public PolymorphicSet<BaseType, BaseType, ChildType, AnotherChildType, GrandChild, GreatGrandChildType>{}
+    class PolymorphismHelper<ChildType> : public PolymorphicSet<ChildType, BaseType, ChildType, AnotherChildType, GrandChild, GreatGrandChildType>{}
+    class PolymorphismHelper<AnotherChildType> : public PolymorphicSet<AnotherChildType, BaseType, ChildType, AnotherChildType, GrandChild, GreatGrandChildType>{}
+    class PolymorphismHelper<GrandChild> : public PolymorphicSet<GrandChild, BaseType, ChildType, AnotherChildType, GrandChild, GreatGrandChildType>{}
+    class PolymorphismHelper<GreatGrandChildType> : public PolymorphicSet<GreatGrandChildType, BaseType, ChildType, AnotherChildType, GrandChild, GreatGrandChildType>{}
+}
+````
+Which can be shortened to:
+````C++
+namespace esd {
+    template <IsChildOf<BaseType> T>
+    class PolymorphismHelper<T> : public PolymorphicSet<T, BaseType, ChildType, AnotherChildType, GrandChild, GreatGrandChildType>{}
+}
 ````
 
 [Back to Index](#Table-of-Contents)
 
-#### esd::PolymorphicClassHelper::SetChildTypes
-------------------------------------------------------------
-
-The only difference between using this type and `esd::ClassHelper` is that you need to specify the child types of your type.
-
-````C++
-// Call this in `Configure`, it is not a member of `HelperType`
-SetChildTypes<ChildT1, ChildT2, ChildT3, ...>();
-````
-
-Each child type must also have a defined `esd::Serialiser<ChildT>` that extends `esd::PolymorphicClassHelper`. The requirement to specify the child types means the definitions of each serialiser must be defined in reverse heirarchical order, i.e. from grandest child type first, to base type last.
+#### esd::PolymorphismHelper::IsDerivedType
+-------------------------------------------
+#### esd::PolymorphismHelper::ValidatePolymorphic
+-------------------------------------------------
+#### esd::PolymorphismHelper::SerialisePolymorphic
+--------------------------------------------------
+#### esd::PolymorphismHelper::DeserialisePolymorphic
+----------------------------------------------------
 
 [Back to Index](#Table-of-Contents)
 
@@ -830,18 +836,28 @@ Each child type must also have a defined `esd::Serialiser<ChildT>` that extends 
  [ ] Inline Documentation of why I've created various types and functions, with intended purpose
  [x] Hide HelperType from the user, implement static passthrough methods inside `esd::JsonClassHelper` itself, hide the `HelperType` from the user
  [x] Create an `esd` directory and move all headers into it, renaming them to remove the `EasySerDes` prefix (except EasySerDes.h!)
- [ ] Remove Json prefixes from type and header names
- [ ] Change type names to match header names
+ [x] Remove Json prefixes from type and header names
+ [x] Change type names to match header names
  [x] Refactor `void SetupHelper()` to `void Configure()`
  [x] Refactor `RegisterConstruction` to `SetConstruction` so it is clear it should only be called once
  [x] Refactor `RegisterInitialisation` to `AddInitialisationCall` so it is clear it can be called multiple times
  [x] Refactor `RegisterChildTypes` to `SetChildTypes` so it is clear it should be called only once
- [ ] Refactor `PolmorphicClassHelper` to `PolymorphismHelper`, make it not extend ClassHelper, set child types in class template, removing need for a call to SetChildTypes (is this possible?! still need to call static code somewhere too add the child types!)
+ [x] Refactor `PolmorphicClassHelper` to `PolymorphismHelper`, make it not extend ClassHelper, remove need for a call to SetChildTypes
+ [ ] Finish PolymorphismHelper README entry above
+ [ ] Attempt to move knowledge of ClassHelper and PolymorphismHelper out of stdLibSupport, perhpas by definind Serialiser overloads in them that are more constrained, OR perhaps by moving the polymorphism check into the DeserialiseInPlace function?
+ [ ] Attempt to define TypeName<T>() using typeid.name()
+ [ ] Add tests for polymorphism with a pure virtual base class
+ [ ] Check if a std::is_polymorphic<> check on types supported by polymorphism is a good idea (perhaps just the BaseClass and not DerivedTypes?)
+ [ ] Push to Github
+ [ ] Add some github extensions (test coverage, auto-running tests, linter e.t.c.)
+ [ ] Zero warnings
+ [ ] 100% test coverage
  [ ] Add to website and link to website in README
  [ ] In the "Adding It To Your Own Project" section, link to one of my projects that uses this library as a complete example
+ [ ] MAYBE Overhaul of all function calls to include a `Context fullContext`, with `auto currentContext = fullContext.current();` and `currentContext.AddErrorMessage(...)` or `fullContext.GetSharedPointerCache()` (If The type cannot be copied or moved, it would require an existing value to have context.Next() directly in the next function call, which could automatically pick up the function name for stack tracing e.t.c.?)
+ [ ] MAYBE As an extension of the Context idea above, use the context to hide the storage format from the API so that non JSON formats could be supported
  [ ] MAYBE POD helper (that would implement the `Configure` function automatically)
- [ ] MAYBE Enum helper to allow setting of stricter validation of values
- [ ] MAYBE seperate the `nlohmann::json` requirement from the API, would need an API with some std::library default impl, optional nlohmann impl, and ability for end user to create their own to easily serialise to any format and back, would need to pass as a template param, as it dictates the return type and parameter types of various functions...
- [ ] create an EnumHelper that allows the user to set a max and min value, or set allowed values, or set valid flags etc
+ [ ] MAYBE Enum helper that allows the user to set a max and min value, or set allowed values, or set valid flags etc
+ [ ] MAYBE seperate the `nlohmann::json` requirement from the API, would need an API with some std::library default impl, optional nlohmann impl, and ability for end user to create their own to easily serialise to any format and back, would need to pass as a templateparam, as it dictates the return type and parameter types of various functions...
 
 [Back to Index](#Table-of-Contents)

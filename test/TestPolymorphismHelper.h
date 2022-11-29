@@ -1,8 +1,8 @@
-#ifndef TESTPOLYMORPHICCLASSHELPER_H
-#define TESTPOLYMORPHICCLASSHELPER_H
+#ifndef TESTPOLYMORPHISMHELPER_H
+#define TESTPOLYMORPHISMHELPER_H
 
-#include "esd/PolymorphicClassHelper.h"
-#include "esd/BuiltInTypeSupport.h"
+#include "esd/ClassHelper.h"
+#include "esd/PolymorphismHelper.h"
 
 #include <iostream>
 
@@ -113,8 +113,36 @@ std::ostream& operator<<(std::ostream& ostr, const GrandChildTestType& value)
  * EasySerDes integration
  */
 
-template<>
-class esd::Serialiser<GrandChildTestType> : public esd::PolymorphicClassHelper<GrandChildTestType, double, bool> {
+template <>
+class esd::Serialiser<BaseTestType> : public esd::ClassHelper<BaseTestType, double> {
+public:
+    static void Configure()
+    {
+        SetConstruction(CreateParameter(&BaseTestType::d_));
+    }
+};
+
+template <>
+class esd::Serialiser<ChildTestTypeA> : public esd::ClassHelper<ChildTestTypeA, double> {
+public:
+    static void Configure()
+    {
+        SetConstruction(CreateParameter(&ChildTestTypeA::d_));
+    }
+};
+
+template <>
+class esd::Serialiser<ChildTestTypeB> : public esd::ClassHelper<ChildTestTypeB, double, bool> {
+public:
+    static void Configure()
+    {
+        SetConstruction(CreateParameter(&ChildTestTypeB::d_),
+                        CreateParameter(&ChildTestTypeB::b_));
+    }
+};
+
+template <>
+class esd::Serialiser<GrandChildTestType> : public esd::ClassHelper<GrandChildTestType, double, bool> {
 public:
     static void Configure()
     {
@@ -124,34 +152,6 @@ public:
 };
 
 template<>
-class esd::Serialiser<ChildTestTypeB> : public esd::PolymorphicClassHelper<ChildTestTypeB, double, bool> {
-public:
-    static void Configure()
-    {
-        SetConstruction(CreateParameter(&ChildTestTypeB::d_),
-                        CreateParameter(&ChildTestTypeB::b_));
-        SetChildTypes<GrandChildTestType>();
-    }
-};
+class esd::PolymorphismHelper<BaseTestType> : public esd::PolymorphicSet<BaseTestType, BaseTestType, ChildTestTypeA, ChildTestTypeB, GrandChildTestType> {};
 
-template<>
-class esd::Serialiser<ChildTestTypeA> : public esd::PolymorphicClassHelper<ChildTestTypeA, double> {
-public:
-    static void Configure()
-    {
-        SetConstruction(CreateParameter(&ChildTestTypeA::d_));
-    }
-};
-
-template<>
-class esd::Serialiser<BaseTestType> : public esd::PolymorphicClassHelper<BaseTestType, double> {
-public:
-    static void Configure()
-    {
-        SetConstruction(CreateParameter(&BaseTestType::d_));
-
-        SetChildTypes<ChildTestTypeA, ChildTestTypeB>();
-    }
-};
-
-#endif // TESTPOLYMORPHICCLASSHELPER_H
+#endif // TESTPOLYMORPHISMHELPER_H

@@ -74,3 +74,15 @@ TEST_CASE("NestedTestType", "[json]")
     REQUIRE(deserialisedReserialised == serialised);
     REQUIRE(deserialised == original);
 }
+
+TEST_CASE("Invalid Key Present", "[json]")
+{
+    TrivialTestType original { 79, { 42, 44, 79 }, "foobar" };
+
+    json serialised = esd::Serialise(original);
+    serialised["invalidKey"] = 420;
+    REQUIRE_FALSE(esd::Validate<TrivialTestType>(serialised));
+
+    std::optional<TrivialTestType> deserialised = esd::Deserialise<TrivialTestType>(serialised);
+    REQUIRE(deserialised == std::nullopt);
+}

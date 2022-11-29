@@ -23,7 +23,7 @@ add_library(CppEasySerDes INTERFACE
     esd/StdLibSupport.h
     esd/JsonHelpers.h
     esd/ClassHelper.h
-    esd/PolymorphicClassHelper.h
+    esd/PolymorphismHelper.h
 )
 
 add_custom_target(Other
