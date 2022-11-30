@@ -311,48 +311,23 @@ class Serialiser<std::unique_ptr<T>> {
 public:
     static bool Validate(const nlohmann::json& serialised)
     {
+        bool valid = false;
+
         if (serialised == nullPointerString) {
-            return true;
+            valid = true;
+        } else if constexpr (HasPolymorphismHelperSpecialisation<T>) {
+            valid = PolymorphismHelper<T>::ValidatePolymorphic(serialised);
+        } else {
+            valid = Serialiser<T>::Validate(serialised);
         }
 
-        if constexpr (HasPolymorphismHelperSpecialisation<T>) {
-            /*
-             * PolymorphicHelper calls back into this specialisation, but with
-             * `T` as the derived type, so the `IsDerivedType` check is
-             * important to prevent infinite recursive calls.
-             */
-            if (PolymorphismHelper<T>::IsDerivedType(serialised)) {
-                return PolymorphismHelper<T>::ValidatePolymorphic(serialised);
-            }
-        }
-
-        return Serialiser<T>::Validate(serialised);
+        return valid;
     }
 
     static nlohmann::json Serialise(const std::unique_ptr<T>& toSerialise)
     {
         // Delegate to raw pointer function so that shared_ptr<T> can share the impl
         return Serialise(toSerialise.get());
-    }
-
-    static nlohmann::json Serialise(const T* const toSerialise)
-    {
-        if (toSerialise == nullptr) {
-            return nullPointerString;
-        }
-
-        if constexpr (HasPolymorphismHelperSpecialisation<T>) {
-            /*
-             * PolymorphicHelper calls back into this specialisation, but with
-             * `T` as the derived type, so the `IsDerivedType` check is
-             * important to prevent infinite recursive calls.
-             */
-            if (PolymorphismHelper<T>::IsDerivedType(*toSerialise)) {
-                return PolymorphismHelper<T>::SerialisePolymorphic(*toSerialise);
-            }
-        }
-
-        return Serialiser<T>::Serialise(*toSerialise);
     }
 
     static std::unique_ptr<T> Deserialise(const nlohmann::json& serialised)
@@ -363,11 +338,11 @@ public:
 
         if constexpr (HasPolymorphismHelperSpecialisation<T>) {
             /*
-             * PolymorphicHelper calls back into this specialisation, but with
-             * `T` as the derived type, so the `IsDerivedType` check is
-             * important to prevent infinite recursive calls.
+             * PolymorphicHelper calls back into `
+             * Serialiser<std::unique_ptr<DerivedType>>`, so the `IsDerivedType`
+             * check is important here to prevent infinite recursive calls.
              */
-            if (PolymorphismHelper<T>::IsDerivedType(serialised)) {
+            if (PolymorphismHelper<T>::ContainsPolymorphicType(serialised)) {
                 return PolymorphismHelper<T>::DeserialisePolymorphic(serialised);
             }
         }
@@ -381,6 +356,22 @@ public:
 
 private:
     static inline const std::string nullPointerString = "nullptr";
+
+    friend Serialiser<std::shared_ptr<T>>;
+    static nlohmann::json Serialise(const T* const toSerialise)
+    {
+        nlohmann::json serialised;
+
+        if (toSerialise == nullptr) {
+            serialised = nullPointerString;
+        } else if constexpr (HasPolymorphismHelperSpecialisation<T>) {
+            serialised = PolymorphismHelper<T>::SerialisePolymorphic(*toSerialise);
+        } else {
+            serialised = Serialiser<T>::Serialise(*toSerialise);
+        }
+
+        return serialised;
+    }
 };
 
 /**

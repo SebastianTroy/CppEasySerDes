@@ -71,28 +71,9 @@ public:
     using base_type = BaseType;
 
     /**
-     * Returns false if `value` is an instance of BaseType, `true` if it is any
-     * of the other `DerivedTypes`.
-     */
-    template <typename CandidateType>
-    requires (... || std::same_as<CandidateType, DerivedTypes>)
-    static bool IsDerivedType(const CandidateType& value)
-    {
-        return IsAnotherTypeBetterMatched<BaseType>(value);
-    }
-
-    /**
      * Returns `true` if serialised contains `typeNameKey`.
-     *
-     * You might expect this to return based on whether the typeName stored in
-     * the json matched `TypeName<BaseType>()`, but `SerialisePolymorphic`
-     * actually strips the `typeNameKey` out of the JSON so must always be
-     * called  before `Serialise<CandidateType>` can be called succesfully.
-     *
-     * Again this stops infinitely recursive calls between `Serialise<T>` and
-     * `PolymorphismHeler<BaseType>::SerialisePolymorphic` (and for Validate).
      */
-    static bool IsDerivedType(const nlohmann::json& serialised)
+    static bool ContainsPolymorphicType(const nlohmann::json& serialised)
     {
         return serialised.contains(typeNameKey_);
     }

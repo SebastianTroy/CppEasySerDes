@@ -296,17 +296,11 @@ template <>
 class esd::Serialiser<GrandChildType> : public esd::ClassHelper<GrandChildType, int>;
 ````
 
-To support the polymorphic aspect we can just add the following definition. (Polymorphism is only supported via smart pointers)
+To support the polymorphic aspect we can just add the following definition. 
+Note that ParentType is listed twice in `PolymorphicSet<...>`. The first type in the list must match the type in `PolymorphismHelper<T>` and the following types are all of the types a ParentType* could be pointing to.
 
 ````C++
-namespace esd {
-    template <IsChildOf<BaseType> T>
-    class PolymorphismHelper<T> : public PolymorphicSet<T, BaseType, ChildTypeA, ChildTypeB, GrandChildType>{}
-}
-
-// Note that the following leads to "template`esd::PolymorphismHelper<T>` redefinition" errors with my GCC compiler.
-// template <esd::IsChildOf<BaseType> T>
-// class esd::PolymorphismHelper<T> : public esd::PolymorphicSet<T, BaseType, ChildTypeA, ChildTypeB, GrandChildType>{}
+class PolymorphismHelper<ParentType> : public PolymorphicSet<ParentType, ParentType, ChildTypeA, ChildTypeB, GrandChildType>{}
 ````
 
 To Serialise and Deserialise these types, you have three options:
@@ -793,36 +787,65 @@ public:
 ### esd::PolymorphismHelper
 ---------------------------------------
 
-To allow the library to treat polymorphic types correctly, you must define a `PolymorphismHelper` for each polymorphic type. This is achieved by defining a template specialisation that specialises for more than a songle type at a time.
+To allow the library to treat polymorphic types correctly, you must define a `PolymorphismHelper` for each polymorphic type.
 
-The long way to do this is:
+**Polymorphism is only supported through smart pointers.**
+
+Each `esd::PolymorphismHelper<T>` extends `esd::PolymorphicSet<BaseType, DerivedTypes>`, where `T` must always be the same type as `BaseType` and `DerivedTypes` must all be derived from `BaseType`.
+
 ````C++
-namespace esd {
-    class PolymorphismHelper<BaseType> : public PolymorphicSet<BaseType, BaseType, ChildType, AnotherChildType, GrandChild, GreatGrandChildType>{}
-    class PolymorphismHelper<ChildType> : public PolymorphicSet<ChildType, BaseType, ChildType, AnotherChildType, GrandChild, GreatGrandChildType>{}
-    class PolymorphismHelper<AnotherChildType> : public PolymorphicSet<AnotherChildType, BaseType, ChildType, AnotherChildType, GrandChild, GreatGrandChildType>{}
-    class PolymorphismHelper<GrandChild> : public PolymorphicSet<GrandChild, BaseType, ChildType, AnotherChildType, GrandChild, GreatGrandChildType>{}
-    class PolymorphismHelper<GreatGrandChildType> : public PolymorphicSet<GreatGrandChildType, BaseType, ChildType, AnotherChildType, GrandChild, GreatGrandChildType>{}
-}
+// Add polymorphic support for BaseType smart pointers
+class esd::PolymorphismHelper<BaseType> : public esd::PolymorphicSet<BaseType, BaseType, ChildType, AnotherChildType, GrandChild, GreatGrandChildType>{};
+
+struct Foo {
+    // Polymorphic, these can point to instances of any of the derived types
+    std::vector<std::shared_ptr<BaseType>> polymorphic;
+
+    // NOT POLYMORPHIC! when saved and loaded these will all be sliced to instances of `GrandChild`!
+    // FIX: `class esd::PolymorphismHelper<GrandChild> : public esd::PolymorphicSet<GrandChild, GrandChild, GreatGrandChildType>{};`
+    std::vector<std::shared_ptr<GrandChild>> notPolymorphic;
+};
 ````
-Which can be shortened to:
+
+It is worth noting that `T` counts as being derived from `T`, so it must be repeated in the `DerivedTypes` list if you intend to support instances of the base type too.
+
 ````C++
-namespace esd {
-    template <IsChildOf<BaseType> T>
-    class PolymorphismHelper<T> : public PolymorphicSet<T, BaseType, ChildType, AnotherChildType, GrandChild, GreatGrandChildType>{}
-}
+class PolymorphismHelper<PureVirtualBaseType> : public PolymorphicSet<PureVirtualBaseType, DerivedTypes...>{};
+class PolymorphismHelper<ConstructableBaseType> : public PolymorphicSet<ConstructableBaseType, ConstructableBaseType, DerivedTypes...>{};
 ````
+
 
 [Back to Index](#Table-of-Contents)
 
-#### esd::PolymorphismHelper::IsDerivedType
--------------------------------------------
+#### esd::PolymorphismHelper::ContainsPolymorphicType
+-----------------------------------------------------
+
+Takes a reference to a `const nlohmann::json& serialised`reference,
+   - If it returns `true` if you need to call `PolymorphismHelper<T>::ValidatePolymorphic(serialised)` or `PolymorphismHelper<T>::DeserialisePolymorphic(serialised)`.
+   - If it returns `false` if you need to call `esd::Validate<T>(serialised)` or `esd::Deserialise<T>(serialised)` (or `Serialiser<T>::`[DeserialiseInPlace](#esdClassHelperDeserialiseInPlace)`(...)`). 
+
+[Back to Index](#Table-of-Contents)
+
 #### esd::PolymorphismHelper::ValidatePolymorphic
 -------------------------------------------------
+
+Takes a `const nlohmann::json& serialised`reference and forwards the Validate call onto the correct child type's validator.
+
+[Back to Index](#Table-of-Contents)
+
 #### esd::PolymorphismHelper::SerialisePolymorphic
 --------------------------------------------------
+
+Takes a `BaseType& instance` reference and forwards the serialise call onto the correct child type's serialiser.
+
+[Back to Index](#Table-of-Contents)
+
 #### esd::PolymorphismHelper::DeserialisePolymorphic
 ----------------------------------------------------
+
+Takes a `const nlohmann::json& serialised`reference and forwards the Deserialise call call onto `Serialiser<std::unique_ptr<CorrectDerivedType>>::Deserialise(serialised)`.
+
+Because the `Serialiser<unique_ptr<T>>` calls `PolymorphismHelper<T>::DeserialisePolymorphic(serialised)` too, we need to avoid infinetely recursive calls, to achieve this, `DeserialisePolymorphic` **always makes a copy of serialised**, strips the marker that indicates it is polymorphic, and forwards the copy onto the final `Deserialise` call. 
 
 [Back to Index](#Table-of-Contents)
 
@@ -843,9 +866,8 @@ namespace esd {
  [x] Refactor `RegisterInitialisation` to `AddInitialisationCall` so it is clear it can be called multiple times
  [x] Refactor `RegisterChildTypes` to `SetChildTypes` so it is clear it should be called only once
  [x] Refactor `PolmorphicClassHelper` to `PolymorphismHelper`, make it not extend ClassHelper, remove need for a call to SetChildTypes
- [ ] Finish PolymorphismHelper README entry above
- [ ] Attempt to move knowledge of ClassHelper and PolymorphismHelper out of stdLibSupport, perhpas by definind Serialiser overloads in them that are more constrained, OR perhaps by moving the polymorphism check into the DeserialiseInPlace function?
- [ ] Attempt to define TypeName<T>() using typeid.name()
+ [ ] The "Supporting Polymorphic Types" example contains a dense and messy afterthought on how to use polymorphic types. Perhaps add another example which is a simple but complete use case?
+ [ ] Attempt to define TypeName<T>() using `typeid.name()`
  [ ] Add tests for polymorphism with a pure virtual base class
  [ ] Check if a std::is_polymorphic<> check on types supported by polymorphism is a good idea (perhaps just the BaseClass and not DerivedTypes?)
  [ ] Push to Github

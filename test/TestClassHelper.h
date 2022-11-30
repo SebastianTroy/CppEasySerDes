@@ -173,6 +173,54 @@ public:
     }
 };
 
+/*
+ * Test that certain member types prevent compilation, and that ClassHelper
+ * disallows pointer and reference ConstructionArgs (because they'll only ever
+ * point to tempory values!)
+ */
+class TypeWithNormalString {
+public:
+    std::string c_;
+};
+
+class TypeWithReference {
+public:
+    std::string& c_;
+};
+
+class TypeWithConstReference {
+public:
+    const std::string& c_;
+};
+
+class TypeWithPointer {
+public:
+    std::string* c_;
+};
+
+template <typename T, typename... Args>
+concept TypeIsSupported = requires (nlohmann::json j) {
+    { esd::ClassHelper<T, Args...>::SetConstruction(esd::ClassHelper<T, Args...>::CreateParameter(&T::c_, "c")) };
+    { esd::ClassHelper<T, Args...>::Deserialise(j) } -> std::same_as<T>;
+};
+
+static_assert(TypeIsSupported<TypeWithNormalString, std::string>);
+static_assert(!TypeIsSupported<TypeWithNormalString, std::string&>);
+static_assert(!TypeIsSupported<TypeWithNormalString, std::string*>);
+
+static_assert(!TypeIsSupported<TypeWithReference, std::string>);
+static_assert(!TypeIsSupported<TypeWithReference, std::string&>);
+static_assert(!TypeIsSupported<TypeWithReference, std::string*>);
+
+static_assert(!TypeIsSupported<TypeWithConstReference, std::string>);
+static_assert(!TypeIsSupported<TypeWithConstReference, std::string&>);
+static_assert(!TypeIsSupported<TypeWithConstReference, std::string*>);
+
+static_assert(!TypeIsSupported<TypeWithPointer, std::string>);
+static_assert(!TypeIsSupported<TypeWithPointer, std::string&>);
+static_assert(!TypeIsSupported<TypeWithPointer, std::string*>);
+
+
 } // end namespace esd
 
 #endif // TESTCLASSHELPER_H

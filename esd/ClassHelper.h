@@ -47,6 +47,13 @@ namespace {
     class InternalHelper;
 
     /**
+     * Used to make sure the user isn't trying to read/write to/from class
+     * members that are pointers or references.
+     */
+    template <typename T>
+    concept IsPointerOrReference = std::is_pointer_v<T> || std::is_reference_v<T>;
+
+    /**
      * This struct holds type information to assist template type typededuction
      * in various places. It is used when defining how the library will call a
      * constructor or a function during deserialisation.
@@ -86,7 +93,9 @@ namespace {
  * targets.
  */
 template <typename T, typename... ConstructionArgs>
-requires std::is_class_v<T> && (std::is_default_constructible_v<T> || std::constructible_from<T, ConstructionArgs...>)
+requires std::is_class_v<T>
+      && std::is_destructible_v<T>
+      && (!(... || IsPointerOrReference<ConstructionArgs>))
 class ClassHelper {
 public:
     ///
@@ -498,7 +507,7 @@ public:
     ///
     /// The intent here is to allow advanced users to re-use all of the code
     /// here for constructing a user type, but to construct that user type via
-    /// a factory that doesn't directly return an intance of the type.
+    /// a factory that doesn't return an intance of the type.
     ///
     /// This is important for supporting serialisation of boxed types like smart
     /// pointers, because it doesn't require the user type to be copied or moved
@@ -518,36 +527,23 @@ public:
     ///
 
     /**
-     * This overload is for factories that return a type that can be de-
-     * referenced into an insatnce of T.
+     * Accepts a callable that will somehow create an instance of type `T` and
+     * return something that can be de-referenced to a reference of type T. If
+     * the factory itself cannot do this, it should be wrapped in a lambda that
+     * forwards the call to the factory and then gets a pointer to the instance
+     * via other means.
      *
-     * e.g. using std::make_shared to return a smart pointer that can be
-     * dereferenced.
+     * It also accepts a const reference to the json that will be used to
+     * generate the input for the factory function.
+     *
+     * FIXME this assumes the factory doesn't fail or return a nullptr, consider requiring return type is comparable to nullptr too
      */
     template <typename Invocable>
     requires std::is_invocable_v<Invocable, ConstructionArgs...>
+          && TypeIsDereferencableFrom<T, ReturnTypeNoCVRef<Invocable, ConstructionArgs...>>
     [[nodiscard]] static auto DeserialiseInPlace(Invocable factory, const nlohmann::json& toDeserialise) -> ReturnTypeNoCVRef<Invocable, ConstructionArgs...>
     {
-        return helper_.Deserialise(std::forward<Invocable>(factory), toDeserialise);
-    }
-
-    /**
-     * This overload is for factories that return nothing, or something that
-     * cannot be de-referenced into an instance of type T. It also takes a
-     * function that can be called by EasySerDes to get access to the newly
-     * constructed instance in order to complete deserialisation.
-     *
-     * e.g. using emplace_back in a vector, with a functrion that forwards a
-     * call to myVec.back().
-     *
-     * FIXME needs testing
-     * FIXME pretty sure this doesn't work for factories returning void! (need to fix documentation about this too!)
-     */
-    template <typename Invocable>
-    requires std::is_invocable_v<Invocable, ConstructionArgs...>
-    [[nodiscard]] static auto DeserialiseInPlace(Invocable factory, const std::function<T* (ReturnTypeNoCVRef<Invocable, ConstructionArgs...>&)>& accessResultFromFactoryOutput, const nlohmann::json& toDeserialise) -> ReturnTypeNoCVRef<Invocable, ConstructionArgs...>
-    {
-        return helper_.Deserialise(std::forward<Invocable>(factory), accessResultFromFactoryOutput, toDeserialise);
+        return helper_.DeserialiseInPlace(std::forward<Invocable>(factory), toDeserialise, std::index_sequence_for<ConstructionArgs...>());
     }
 
 private:
@@ -615,71 +611,6 @@ public:
         }
     }
 
-    [[nodiscard]] T Deserialise(const nlohmann::json& toDeserialise)
-    {
-        T deserialised = constructor_(toDeserialise);
-        for (auto& initialiser : initialisationCalls_) {
-            std::invoke(initialiser, toDeserialise, deserialised);
-        }
-        for (const auto& [ key, memberHelper ] : variables_) {
-            memberHelper.parser_(toDeserialise.at(key), deserialised);
-        }
-        std::invoke(postDeserialisationAction_, toDeserialise, deserialised);
-        return deserialised;
-    }
-
-    template <typename Factory>
-    requires std::is_invocable_v<Factory, ConstructionArgs...>
-          && std::same_as<T, ReturnTypeNoCVRef<Factory, ConstructionArgs...>>
-    [[nodiscard]] ReturnTypeNoCVRef<Factory, ConstructionArgs...> Deserialise(Factory factory, const nlohmann::json& toDeserialise)
-    {
-        return Deserialise<Factory>(std::forward<Factory>(factory), [](T& result) -> T* { return &result; }, toDeserialise);
-    }
-
-    template <typename Factory>
-    requires std::is_invocable_v<Factory, ConstructionArgs...>
-          && TypeIsDereferencableFrom<T, ReturnTypeNoCVRef<Factory, ConstructionArgs...>>
-    [[nodiscard]] ReturnTypeNoCVRef<Factory, ConstructionArgs...> Deserialise(Factory factory, const nlohmann::json& toDeserialise)
-    {
-        return Deserialise<Factory>(std::forward<Factory>(factory), [](auto& result) -> T* { return &*result; }, toDeserialise);
-    }
-
-    template <typename Factory>
-    requires std::is_invocable_v<Factory, ConstructionArgs...>
-    [[nodiscard]]  ReturnTypeNoCVRef<Factory, ConstructionArgs...> Deserialise(Factory factory, const std::function<T* (ReturnTypeNoCVRef<Factory, ConstructionArgs...>&)>& accessResultFromFactoryOutput, const nlohmann::json& toDeserialise)
-    {
-        return Deserialise(std::forward<Factory>(factory), accessResultFromFactoryOutput, toDeserialise, std::index_sequence_for<ConstructionArgs...>());
-    }
-
-    template <typename Factory, size_t... Indexes>
-    requires std::is_invocable_v<Factory, ConstructionArgs...>
-          && (sizeof...(ConstructionArgs) == sizeof...(Indexes))
-    [[nodiscard]]  ReturnTypeNoCVRef<Factory, ConstructionArgs...> Deserialise(Factory factory, const std::function<T* (ReturnTypeNoCVRef<Factory, ConstructionArgs...>&)>& accessResultFromFactoryOutput, const nlohmann::json& toDeserialise, std::index_sequence<Indexes...>)
-    {
-        using ReturnType = ReturnTypeNoCVRef<Factory, ConstructionArgs...>;
-
-        ReturnType retVal =  std::invoke(factory, esd::DeserialiseWithoutChecks<ConstructionArgs>(toDeserialise.at(constructionVariables_.at(Indexes)))...);
-        T* deserialised = std::invoke(accessResultFromFactoryOutput, retVal);
-        for (auto& initialiser : initialisationCalls_) {
-            std::invoke(initialiser, toDeserialise, *deserialised);
-        }
-        for (const auto& [ key, memberHelper ] : variables_) {
-            memberHelper.parser_(toDeserialise.at(key), *deserialised);
-        }
-        std::invoke(postDeserialisationAction_, toDeserialise, *deserialised);
-        return retVal;
-    }
-
-    [[nodiscard]] nlohmann::json Serialise(const T& toSerialise)
-    {
-        nlohmann::json serialised = nlohmann::json::object();
-        for (const auto& [ key, memberHelper ] : variables_) {
-            memberHelper.writer_(toSerialise, serialised);
-        }
-        std::invoke(postSerialisationAction_, toSerialise, serialised);
-        return serialised;
-    }
-
     [[nodiscard]] bool Validate(const nlohmann::json& json)
     {
         bool valid = json.is_object();
@@ -702,6 +633,49 @@ public:
             }
         }
         return valid;
+    }
+
+    [[nodiscard]] nlohmann::json Serialise(const T& toSerialise)
+    {
+        nlohmann::json serialised = nlohmann::json::object();
+        for (const auto& [ key, memberHelper ] : variables_) {
+            memberHelper.writer_(toSerialise, serialised);
+        }
+        std::invoke(postSerialisationAction_, toSerialise, serialised);
+        return serialised;
+    }
+
+    [[nodiscard]] T Deserialise(const nlohmann::json& toDeserialise)
+    {
+        T deserialised = constructor_(toDeserialise);
+        for (auto& initialiser : initialisationCalls_) {
+            std::invoke(initialiser, toDeserialise, deserialised);
+        }
+        for (const auto& [ key, memberHelper ] : variables_) {
+            memberHelper.parser_(toDeserialise.at(key), deserialised);
+        }
+        std::invoke(postDeserialisationAction_, toDeserialise, deserialised);
+        return deserialised;
+    }
+
+    template <typename Factory, size_t... Indexes>
+    requires std::is_invocable_v<Factory, ConstructionArgs...>
+          && TypeIsDereferencableFrom<T, ReturnTypeNoCVRef<Factory, ConstructionArgs...>>
+          && (sizeof...(ConstructionArgs) == sizeof...(Indexes))
+    [[nodiscard]] auto DeserialiseInPlace(Factory factory, const nlohmann::json& toDeserialise, std::index_sequence<Indexes...>) -> ReturnTypeNoCVRef<Factory, ConstructionArgs...>
+    {
+        using ReturnType = ReturnTypeNoCVRef<Factory, ConstructionArgs...>;
+
+        ReturnType retVal =  std::invoke(factory, esd::DeserialiseWithoutChecks<ConstructionArgs>(toDeserialise.at(constructionVariables_.at(Indexes)))...);
+        T& deserialised = *retVal;
+        for (auto& initialiser : initialisationCalls_) {
+            std::invoke(initialiser, toDeserialise, deserialised);
+        }
+        for (const auto& [ key, memberHelper ] : variables_) {
+            memberHelper.parser_(toDeserialise.at(key), deserialised);
+        }
+        std::invoke(postDeserialisationAction_, toDeserialise, deserialised);
+        return retVal;
     }
 
     void SetConstruction(Parameter<std::remove_cvref_t<ConstructionArgs>>... params)
