@@ -54,6 +54,13 @@ namespace {
     concept IsPointerOrReference = std::is_pointer_v<T> || std::is_reference_v<T>;
 
     /**
+     * Used to make sure a factory succeeded, and that we aren't about to try
+     * and dereference a nullptr or box type containing a nullptr.
+     */
+    template <typename T>
+    concept IsComparableToNullptr = requires (T t) { { t == nullptr } -> std::same_as<bool>; };
+
+    /**
      * This struct holds type information to assist template type typededuction
      * in various places. It is used when defining how the library will call a
      * constructor or a function during deserialisation.
@@ -535,12 +542,11 @@ public:
      *
      * It also accepts a const reference to the json that will be used to
      * generate the input for the factory function.
-     *
-     * FIXME this assumes the factory doesn't fail or return a nullptr, consider requiring return type is comparable to nullptr too
      */
     template <typename Invocable>
     requires std::is_invocable_v<Invocable, ConstructionArgs...>
           && TypeIsDereferencableFrom<T, ReturnTypeNoCVRef<Invocable, ConstructionArgs...>>
+          && IsComparableToNullptr<ReturnTypeNoCVRef<Invocable, ConstructionArgs...>>
     [[nodiscard]] static auto DeserialiseInPlace(Invocable factory, const nlohmann::json& toDeserialise) -> ReturnTypeNoCVRef<Invocable, ConstructionArgs...>
     {
         return helper_.DeserialiseInPlace(std::forward<Invocable>(factory), toDeserialise, std::index_sequence_for<ConstructionArgs...>());
@@ -666,15 +672,20 @@ public:
     {
         using ReturnType = ReturnTypeNoCVRef<Factory, ConstructionArgs...>;
 
-        ReturnType retVal =  std::invoke(factory, esd::DeserialiseWithoutChecks<ConstructionArgs>(toDeserialise.at(constructionVariables_.at(Indexes)))...);
-        T& deserialised = *retVal;
-        for (auto& initialiser : initialisationCalls_) {
-            std::invoke(initialiser, toDeserialise, deserialised);
+        ReturnType retVal = std::invoke(factory, esd::DeserialiseWithoutChecks<ConstructionArgs>(toDeserialise.at(constructionVariables_.at(Indexes)))...);
+
+        if (retVal != nullptr) {
+            retVal = std::invoke(factory, esd::DeserialiseWithoutChecks<ConstructionArgs>(toDeserialise.at(constructionVariables_.at(Indexes)))...);
+            T& deserialised = *retVal;
+            for (auto& initialiser : initialisationCalls_) {
+                std::invoke(initialiser, toDeserialise, deserialised);
+            }
+            for (const auto& [ key, memberHelper ] : variables_) {
+                memberHelper.parser_(toDeserialise.at(key), deserialised);
+            }
+            std::invoke(postDeserialisationAction_, toDeserialise, deserialised);
         }
-        for (const auto& [ key, memberHelper ] : variables_) {
-            memberHelper.parser_(toDeserialise.at(key), deserialised);
-        }
-        std::invoke(postDeserialisationAction_, toDeserialise, deserialised);
+
         return retVal;
     }
 
