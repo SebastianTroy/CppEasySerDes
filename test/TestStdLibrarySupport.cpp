@@ -185,7 +185,26 @@ TEST_CASE("StdLibTypes", "[json]")
         RunTest(std::make_shared<std::tuple<int, char, double>>(42, 'f', 0.314), json::value_t::object);
         RunTest(std::shared_ptr<int>(nullptr), json::value_t::object);
 
-        SECTION("Preserve sharedness")
+        SECTION("Preserve sharedness within a Deserialise calls")
+        {
+            auto pointers = std::make_pair(std::make_shared<int>(42), std::make_shared<int>(42));
+            REQUIRE(pointers.first != pointers.second);
+
+            auto serialised = esd::Serialise(pointers);
+            auto deserialisedPtrs = esd::DeserialiseWithoutChecks<decltype(pointers)>(serialised);
+
+            REQUIRE(pointers != deserialisedPtrs);
+
+            // pointers are different to the original ones
+            REQUIRE(pointers.first.get() != deserialisedPtrs.first.get());
+            REQUIRE(pointers.second.get() != deserialisedPtrs.second.get());
+
+            // values are the same as the original ones
+            REQUIRE(*pointers.first == *deserialisedPtrs.first);
+            REQUIRE(*pointers.second == *deserialisedPtrs.second);
+        }
+
+        SECTION("Don't preserve sharedness between seperate Deserialise calls")
         {
             auto sharedPtr1 = std::make_shared<int>(42);
             auto sharedPtr2 = sharedPtr1;
@@ -200,70 +219,21 @@ TEST_CASE("StdLibTypes", "[json]")
             auto deserialisedSharedPtr1 = esd::DeserialiseWithoutChecks<decltype(sharedPtr1)>(serialised1);
             auto deserialisedSharedPtr2 = esd::DeserialiseWithoutChecks<decltype(sharedPtr2)>(serialised2);
 
-            /*
-             * It is unreasonable to require that sharedness is preserved between
-             * a pointer that was serialised, and a pointer that was created by
-             * deserialisation. In most cases significant time will have passed
-             * between these two acts, and any number of changes may have
-             * occurred to the origional value.
-             *
-             * This could theoretically be overcome by testing equality between
-             * the boxed values would add an uneccesary constraint to every type
-             * that was supported, i.e. that it implemented operator==.
-             */
             REQUIRE(sharedPtr1 == sharedPtr2);
             REQUIRE(sharedPtr1 != deserialisedSharedPtr1);
             REQUIRE(sharedPtr2 != deserialisedSharedPtr2);
-            REQUIRE(deserialisedSharedPtr1 == deserialisedSharedPtr2);
-        }
-
-        SECTION("Don't preserve sharedness between cache clears")
-        {
-            auto sharedPtr1 = std::make_shared<int>(42);
-            auto sharedPtr2 = sharedPtr1;
-
-            auto serialised1 = esd::Serialise(sharedPtr1);
-            auto serialised2 = esd::Serialise(sharedPtr2);
-
-            REQUIRE(serialised1 == serialised2);
-
-            auto deserialisedSharedPtr1 = esd::DeserialiseWithoutChecks<decltype(sharedPtr1)>(serialised1);
-            esd::CacheManager::ClearCaches();
-            auto deserialisedSharedPtr2 = esd::DeserialiseWithoutChecks<decltype(sharedPtr2)>(serialised2);
-
-            REQUIRE(sharedPtr1 == sharedPtr2);
-            REQUIRE(sharedPtr1 != deserialisedSharedPtr1);
-            REQUIRE(sharedPtr2 != deserialisedSharedPtr2);
-            REQUIRE(*sharedPtr1 == *deserialisedSharedPtr1);
-            REQUIRE(*sharedPtr2 == *deserialisedSharedPtr2);
             REQUIRE(deserialisedSharedPtr1 != deserialisedSharedPtr2);
-            REQUIRE(*deserialisedSharedPtr1 == *deserialisedSharedPtr2);
         }
 
         SECTION("Don't add sharedness to identical values")
         {
-            auto sharedPtr1 = std::make_shared<int>(42);
-            auto sharedPtr2 = std::make_shared<int>(42);
+            auto pointers = std::make_pair(std::make_shared<int>(42), std::make_shared<int>(42));
 
+            auto serialised = esd::Serialise(pointers);
+            auto deserialisedPtrs = esd::DeserialiseWithoutChecks<decltype(pointers)>(serialised);
 
-            auto serialised1 = esd::Serialise(sharedPtr1);
-            auto serialised2 = esd::Serialise(sharedPtr2);
-
-            REQUIRE(serialised1 != serialised2);
-
-            auto deserialisedSharedPtr1 = esd::DeserialiseWithoutChecks<decltype(sharedPtr1)>(serialised1);
-            auto deserialisedSharedPtr2 = esd::DeserialiseWithoutChecks<decltype(sharedPtr2)>(serialised2);
-
-            REQUIRE(sharedPtr1 != deserialisedSharedPtr1);
-            REQUIRE(sharedPtr2 != deserialisedSharedPtr2);
-            REQUIRE(deserialisedSharedPtr1 != deserialisedSharedPtr2);
-
-            REQUIRE(*sharedPtr1 == *deserialisedSharedPtr1);
-            REQUIRE(*sharedPtr2 == *deserialisedSharedPtr2);
-            REQUIRE(*deserialisedSharedPtr1 == *deserialisedSharedPtr2);
-
-            REQUIRE(*sharedPtr1 == *sharedPtr1);
-            REQUIRE(*deserialisedSharedPtr1 == *deserialisedSharedPtr2);
+            // Having the same value didn't cause sharing
+            REQUIRE(deserialisedPtrs.first.get() != deserialisedPtrs.second.get());
         }
 
         SECTION("Don't extend lifetime of any pointers")

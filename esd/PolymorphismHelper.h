@@ -5,8 +5,24 @@
 
 #include <memory>
 
-namespace {
+/**
+ * This file provides a means to support polymorphism.
+ *
+ * The aim is to allow a single line definition of class relationships, so that
+ * this library can handle polymorphic types.
+ *
+ * It is brittle in that you have to specify each type that can be supported at
+ * compile time, rather than rely on new child types being picked up
+ * automatically.
+ */
 
+namespace esd {
+
+namespace internal {
+
+    /**
+     * Returns a nicer and more consistent name than typeid(T).name().
+     */
     template <typename T>
     [[ nodiscard ]] constexpr std::string_view TypeName()
     {
@@ -30,6 +46,12 @@ namespace {
     }
 
     template <typename T, typename...Ts>
+    concept IsDerivedFromAtLeastOneOfExcludingSelf = (... || (!std::same_as<T, Ts> && std::derived_from<Ts, T>));
+
+    template <typename...Ts>
+    concept AllParentTypesHaveVirtualDestructor = (... && (!IsDerivedFromAtLeastOneOfExcludingSelf<Ts, Ts...> || std::has_virtual_destructor_v<Ts>));
+
+    template <typename T, typename...Ts>
     constexpr bool AllTypesAreUniqueRecursive()
     {
         if constexpr (sizeof...(Ts) > 0) {
@@ -41,9 +63,7 @@ namespace {
     template <typename...Ts>
     concept AllTypesAreUnique = AllTypesAreUniqueRecursive<Ts...>();
 
-} // end anonymous namespace
-
-namespace esd {
+} // end namespace internal
 
 /**
  * This is the type that needs to be specialised by the user in order to support
@@ -51,8 +71,6 @@ namespace esd {
  *
  * Note that if the base type is a valid value, it must be repeated in the
  * DerivedTypes parameter-pack
- *                                                                                v (only required if BaseType isn't pure virtual)
- * class esd::PolymorphismHelper<BaseType> : public esd::PolymorphicSet<BaseType, BaseType, Child1, Child2, GrandChild, GreatGrandChild...>{}
  */
 template <typename T>
 class PolymorphismHelper;
@@ -61,10 +79,12 @@ template <class T>
 concept HasPolymorphismHelperSpecialisation = requires() { PolymorphismHelper<T>{}; } && std::same_as<T, typename PolymorphismHelper<T>::base_type>;
 
 template <typename BaseType, typename... DerivedTypes>
-requires (sizeof...(DerivedTypes) > 0)
+requires std::has_virtual_destructor_v<BaseType>
+      && (sizeof...(DerivedTypes) > 0)
+      && internal::AllParentTypesHaveVirtualDestructor<DerivedTypes...>
       && (... && std::derived_from<DerivedTypes, BaseType>)
       && (... && TypeSupportedByEasySerDes<DerivedTypes>)
-      && AllTypesAreUnique<DerivedTypes...> // Not required but might help catch bugs
+      && internal::AllTypesAreUnique<DerivedTypes...> // Not required but might help catch bugs
 class PolymorphicSet {
 public:
     // Used to sanity check that the T in PolymorphismHelper<T> matches BaseType
@@ -89,7 +109,7 @@ public:
             std::string storedTypeName = serialised.at(typeNameKey_);
             auto copy = serialised;
             copy.erase(typeNameKey_);
-            valid = ((storedTypeName == TypeName<DerivedTypes>() && Validate<DerivedTypes>(copy)) || ...);
+            valid = ((storedTypeName == internal::TypeName<DerivedTypes>() && Validate<DerivedTypes>(copy)) || ...);
         }
         return valid;
     }
@@ -118,14 +138,10 @@ public:
             // This will be a single type due to parameter pack expansion
             using CurrentType = DerivedTypes;
 
-            bool typeMatched = dynamic_cast<const CurrentType*>(&value);
-            if (typeMatched) {
-                // Only call esd::Serialise with the most derived type possible
-                if (!IsAnotherTypeBetterMatched<CurrentType>(value)) {
-                    serialised = Serialise(dynamic_cast<const CurrentType&>(value));
-                    serialised[typeNameKey_] = TypeName<CurrentType>();
-                    return true; // Stop checking subsequent types
-                }
+            if (typeid(CurrentType).name() == typeid(value).name()) {
+                serialised = Serialise(dynamic_cast<const CurrentType&>(value));
+                serialised[typeNameKey_] = internal::TypeName<CurrentType>();
+                return true; // Stop checking subsequent types
             }
             return false; // Continue checking the other types
         }() || ...);
@@ -166,7 +182,7 @@ public:
                 // This will be a single type due to parameter pack expansion
                 using CurrentType = DerivedTypes;
 
-                if (storedTypeName == TypeName<CurrentType>()) {
+                if (storedTypeName == internal::TypeName<CurrentType>()) {
                     deserialised = DeserialiseWithoutChecks<std::unique_ptr<CurrentType>>(copy);
                     return true;
                 }
@@ -179,19 +195,6 @@ public:
 
 private:
     static const inline std::string typeNameKey_ = "__typeName";
-
-    template <typename CandidateType, typename RefType>
-    static bool IsAnotherTypeBetterMatched(const RefType& ref)
-    {
-        // Don't re-check the current type
-        // && The other type is also a potential match
-        // && The other type is more derived than CurrentType and therefore is a better match
-        // If this is true for any type, return true
-        return ((!std::same_as<CandidateType, DerivedTypes>
-                && dynamic_cast<const DerivedTypes*>(&ref)
-                && std::is_base_of_v<CandidateType, DerivedTypes>) || ...);
-    }
-
 };
 
 } // end namespace esd

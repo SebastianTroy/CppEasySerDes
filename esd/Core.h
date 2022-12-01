@@ -81,20 +81,26 @@ template <typename T> requires TypeSupportedByEasySerDes<T>
 T DeserialiseWithoutChecks(const nlohmann::json& serialised);
 
 /**
- * Some Serialiser<T> types may need to track information between distinct
- * user calls to Serialise or Deserialise (e.g. shared_ptr ideally should return
- * the same shared_ptr for repeat calls to Deserialise of the same serialised
- * shared_ptr).
- *
- * It is important to allow the user to decide when to clear these chaches, so
- * any type wishing to cache data must register a way to clear the cache here.
+ * Some Serialiser<T> types may need to track information within a single
+ * user call to Deserialise (e.g. shared_ptr ideally should not create
+ * duplicates of objects that were saved from a single instance).
  */
 class CacheManager {
 public:
+    struct ClearCachesAtEndOfScope {
+        ~ClearCachesAtEndOfScope()
+        {
+            CacheManager::ClearCaches();
+        }
+    };
+
     static void AddEndOfOperationCallback(std::function<void()>&& cacheClearingcallback)
     {
         cacheClearingCallbacks.push_back(std::move(cacheClearingcallback));
     }
+
+private:
+    static inline std::vector<std::function<void()>> cacheClearingCallbacks{};
 
     static void ClearCaches()
     {
@@ -102,9 +108,6 @@ public:
             std::invoke(callback);
         }
     }
-
-private:
-    static inline std::vector<std::function<void()>> cacheClearingCallbacks{};
 };
 
 ///
@@ -126,6 +129,8 @@ nlohmann::json Serialise(const T& value)
 template <typename T> requires TypeSupportedByEasySerDes<T>
 std::optional<T> Deserialise(const nlohmann::json& serialised)
 {
+    CacheManager::ClearCachesAtEndOfScope c;
+
     if (Serialiser<T>::Validate(serialised)) {
         return std::make_optional(Serialiser<T>::Deserialise(serialised));
     } else {
@@ -136,6 +141,8 @@ std::optional<T> Deserialise(const nlohmann::json& serialised)
 template <typename T> requires TypeSupportedByEasySerDes<T>
 T DeserialiseWithoutChecks(const nlohmann::json& serialised)
 {
+    CacheManager::ClearCachesAtEndOfScope c;
+
     return Serialiser<T>::Deserialise(serialised);
 }
 

@@ -75,7 +75,7 @@ private:
         Serialiser::SetConstruction(Serialiser::CreateParameter([](const std::tuple<Ts...>& t)
         {
             return std::get<Indexes>(t);
-        }, "T" + std::to_string(Indexes) + std::string(TypeName<Ts>())) ...);
+        }, "T" + std::to_string(Indexes) + std::string(internal::TypeName<Ts>())) ...);
     }
 };
 
@@ -87,9 +87,9 @@ public:
         return serialised.is_string();
     }
 
-    static nlohmann::json Serialise(const std::string& stringLikeValue)
+    static nlohmann::json Serialise(const std::string& string)
     {
-        return stringLikeValue;
+        return string;
     }
 
     static std::string Deserialise(const nlohmann::json& serialised)
@@ -136,20 +136,20 @@ class Serialiser<T> {
 public:
     static bool Validate(const nlohmann::json& serialised)
     {
-        return serialised.is_array() && std::ranges::all_of(serialised, esd::Validate<typename T::value_type>);
+        return serialised.is_array() && std::ranges::all_of(serialised, &Serialiser<typename T::value_type>::Validate);
     }
 
     static nlohmann::json Serialise(const T& range)
     {
         nlohmann::json serialisedItems = nlohmann::json::array();
-        std::ranges::transform(range, std::back_inserter(serialisedItems), &esd::Serialise<typename T::value_type>);
+        std::ranges::transform(range, std::back_inserter(serialisedItems), &Serialiser<typename T::value_type>::Serialise);
         return serialisedItems;
     }
 
     static T Deserialise(const nlohmann::json& serialised)
     {
         T items;
-        std::ranges::transform(serialised, std::inserter(items, items.end()), esd::DeserialiseWithoutChecks<typename T::value_type>);
+        std::ranges::transform(serialised, std::inserter(items, items.end()), &Serialiser<typename T::value_type>::Deserialise);
         return items;
     }
 };
@@ -188,13 +188,13 @@ class Serialiser<std::array<T, N>> {
 public:
     static bool Validate(const nlohmann::json& serialised)
     {
-        return serialised.is_array() && serialised.size() == N && std::ranges::all_of(serialised, esd::Validate<T>);
+        return serialised.is_array() && serialised.size() == N && std::ranges::all_of(serialised, &Serialiser<T>::Validate);
     }
 
     static nlohmann::json Serialise(const std::array<T, N>& range)
     {
         nlohmann::json serialisedItems = nlohmann::json::array();
-        std::ranges::transform(range, std::back_inserter(serialisedItems), esd::Serialise<T>);
+        std::ranges::transform(range, std::back_inserter(serialisedItems), &Serialiser<T>::Serialise);
         return serialisedItems;
     }
 
@@ -207,7 +207,7 @@ private:
     template <size_t... I>
     static std::array<T, N> CreateArray(const nlohmann::json& serialised, std::index_sequence<I...>)
     {
-        return std::array<T, N>{ esd::DeserialiseWithoutChecks<T>(serialised.at(I)) ... };
+        return std::array<T, N>{ Serialiser<T>::Deserialise(serialised.at(I)) ... };
     }
 };
 
@@ -238,7 +238,7 @@ public:
             if constexpr (HasClassHelperSpecialisation<T>) {
                 ret = Serialiser<T>::DeserialiseInPlace([](auto... args){ return std::optional<T>::emplace(args...); }, serialised);
             } else if constexpr (std::is_move_constructible_v<T> || std::is_copy_constructible_v<T>) {
-                ret = std::optional<T>(esd::DeserialiseWithoutChecks<T>(serialised));
+                ret = std::optional<T>(Serialiser<T>::Deserialise(serialised));
             }
         }
 
@@ -259,7 +259,7 @@ public:
         // The following immediately called lambda is called once for each type
         valid = (... && [&]() -> bool
         {
-            std::string key = std::string(TypeName<Ts>());
+            std::string key = std::string(internal::TypeName<Ts>());
             return serialised.contains(key) && ((serialised[key] == nullString) || Serialiser<Ts>::Validate(serialised[key]));
         }());
 
@@ -273,7 +273,7 @@ public:
         // The following immediately called lambda is called once for each type
         ([&]()
         {
-            std::string key = std::string(TypeName<Ts>());
+            std::string key = std::string(internal::TypeName<Ts>());
             if (std::holds_alternative<Ts>(toSerialise)) {
                 serialisedVariant[key] = Serialiser<Ts>::Serialise(std::get<Ts>(toSerialise));
             } else {
@@ -291,7 +291,7 @@ public:
         // The following immediately called lambda is called once for each type
         ([&]()
         {
-            std::string key = std::string(TypeName<Ts>());
+            std::string key = std::string(internal::TypeName<Ts>());
             if (serialised[key] != nullString) {
                 ret = Serialiser<Ts>::Deserialise(serialised[key]);
             }
@@ -306,7 +306,7 @@ private:
 
 template <typename T>
 requires HasClassHelperSpecialisation<T>
-      || requires (T, nlohmann::json j) { { std::make_unique<T>(esd::DeserialiseWithoutChecks<T>(j)) } -> std::same_as<std::unique_ptr<T>>; }
+      || requires (T, nlohmann::json j) { { std::make_unique<T>(Serialiser<T>::Deserialise(j)) } -> std::same_as<std::unique_ptr<T>>; }
 class Serialiser<std::unique_ptr<T>> {
 public:
     static bool Validate(const nlohmann::json& serialised)
@@ -350,7 +350,7 @@ public:
         if constexpr (HasClassHelperSpecialisation<T>) {
             return Serialiser<T>::DeserialiseInPlace([](auto... args){ return std::make_unique<T>(args...); }, serialised);
         } else if constexpr (!HasClassHelperSpecialisation<T>) {
-            return std::make_unique<T>(esd::DeserialiseWithoutChecks<T>(serialised));
+            return std::make_unique<T>(Serialiser<T>::Deserialise(serialised));
         }
     }
 
@@ -380,7 +380,7 @@ private:
  */
 template <typename T>
 requires HasClassHelperSpecialisation<T>
-      || requires (T, nlohmann::json j) { { std::make_shared<T>(esd::DeserialiseWithoutChecks<T>(j)) } -> std::same_as<std::shared_ptr<T>>; }
+      || requires (T, nlohmann::json j) { { std::make_shared<T>(Serialiser<T>::Deserialise(j)) } -> std::same_as<std::shared_ptr<T>>; }
 class Serialiser<std::shared_ptr<T>> {
 public:
     static inline const std::string wrappedTypeKey = "wrappedType";

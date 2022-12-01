@@ -10,6 +10,14 @@ A library for easy conversion of C++ types to/from JSON, allowing for a concise 
  - [Why?](#Why)
  - [Known Limitations](#Known-Limitations)
  - [Adding It To Your Own Project](#Adding-It-To-Your-Own-Project).
+ - [Types Supported](#Types-Supported)
+   - [Built in Types](#Built-in-Types) 
+   - [User Types](#User-Types)
+   - [Standard Library](#Standard-Library)
+   - [`std::ranges::range<T>`](#stdrangesrange)
+   - [`shared_ptr` and `unique_ptr`](#shared_ptr-and-unique_ptr)
+     - [Polymorphism](#polymorphism) 
+     - [`shared_ptr` tracking](#)
  - [Examples](#Examples)
    - [Using the Library](#Using-the-Library) 
    - [Supporting A Trivial Type](#Supporting-A-Trivial-Type)
@@ -97,6 +105,140 @@ target_link_libraries(<InsertYourProjectNameHere>
 
 [Back to Index](#Table-of-Contents)
 
+## Types Supported
+------------------
+
+### Built in Types
+------------------
+
+Any `enum` or `enum class` you create will be automatically supported, as a numerical values.
+All numerical types are supported, even those larger than supported natively by nlohmann::json.
+`bool` is supported and stored as `"true"` or `false` strings.
+`char` has an overload and is stored as a string containing a single character. (Note that containers of `char` are specialised to store a single string containing all characters, rather than a list of single character strings).
+
+### User Types
+--------------
+
+To support classes and structs, simply define an `esd::Serialiser` template overload (See [esd::ClassHelper](#esdClassHelper) for details):
+
+````C++
+class esd::Serialiser<MyType> : esd::ClassHelper<MyType, ConstructionArgs...> {
+    void Configure()
+    {
+        ...
+    }
+};
+````
+
+It is also possible to create custom overloads for non-class types (technically you can support classes and structs this way too):
+
+````C++
+class esd::Serialiser<T> {
+    bool Validate(const nlohmann::json& serialised)
+    {
+        ...
+    }
+
+    nlohmann::json Serialise(const T& instance)
+    {
+        ...
+    }
+
+    T Deserialise(const nlohmann::json& serialised)
+    {
+        ...
+    }
+};
+````
+
+### Standard Library
+--------------------
+
+The intent is for all types to be supported, if you need one that is missing raise a bug report and it will be added.
+
+ - `std::byte`, stored as a four character string e.g. `"0xFF"`. // FIXME this is good for readability bad for storage efficiency, needs to be a user choice
+ - `std::pair`, stored as values named `"first"` and `"second"`.
+ - `std::tuple`, stored as values named e.g. `std::tuple<int, Foo<T>` `"T0int"` and `"T1Foo<T>"`.
+ - `std::string`
+ - `std::bitset`, stored as a string containing only `'0'`s and `'1'`s.
+ - `std::array`
+ - `std::optional`, stored either as the contained value, or a `"std::nullopt"` string.
+ - `std::variant`, stored as a list with an entry for each value. One entry will be stored as a value, all others will be a `"nullvariant"` string.
+ - `std::unique_ptr`, stored either as the contained value, or a `"nullptr"` string.
+ - `std::shared_ptr`, stored with some additional data (see [`shared_ptr` tracking](#shared_ptr-tracking))
+
+### std::ranges::range
+----------------------
+
+Any type that satisfies the concept `std::ranges::range<T>` is supported automatically (provided that the range's `value_t` is also supported). It is possible to override this by creating your own specialisation e.g. `class Serialiser<MyRange<T>> ...`.
+
+Notably this supports all standard library containers but doesn't validate for example that all of a set's items, or map's keys are unique, just that all items are individually valid.
+
+There is also a specialisation for ranges of `char`, so that they are stored as a single string, rather than a list of characters.
+
+### `shared_ptr` and `unique_ptr`
+-----------------------------
+
+#### Polymorphism
+-----------------
+
+Both `shared_ptr` and `unique_ptr` support polymorphic types.
+
+For the following example to work:
+ - `DerivedType` is derived from `ParentType`
+ - `esd::Serialiser<ParentType` and `esd::Serialiser<DerivedType>` specialisations exist,
+ - There is an `esd::PolymorphismHelper<ParentType>` specialisation, which .
+
+See the section on [Supporting Polymorphic Types](#Supporting-Polymorphic-Types) for more details.
+
+````C++
+std::unique_ptr<ParentType> basePtr = std::make_unique<DerivedType>(args...);
+
+auto serialised = esd::Serialise(basePtr);
+
+// Even though we're using the `ParentType` Deserialise function, our deserialisedPtr will point to an instance of `DerivedType`
+std::unique_ptr<ParentType> deserialisedPtr = esd::DeserialiseWithoutChecks<std::unique_ptr<ParentType>>(serialised);
+````
+
+`shared_ptr` tracking
+---------------------
+
+`shared_ptr` is a special case, during a call to `esd::Deserialise` it will check the serialised type to see if an existing shared_ptr has already been created by the library during the current call to `esd::Deserialise(...)`.
+
+````C++
+std::shared_ptr<T> originalInstance = std::make_shared<T>(args...);
+
+std::vector<decltype(instance)> instances;
+for (size_t i = 0; i < 100; ++i) {
+    instances.push_back(originalInstance);
+    assert(instances[i].get() == originalInstance.get()); // true, they're pointers to the same address
+}
+
+auto serialised = esd::Serialise(vectorOfInstances);
+
+std::vector<decltype(instance)> deserialisedInstances = esd::DeserialiseWithoutChecks<std::vector<decltype(instance)>>(serialised);
+
+for (size_t i = 0; i < 100; ++i) {
+    // All deserialised pointers are to the same instance
+    assert(deserialisedInstances[0].get() == deserialisedInstances[i].get()); // true, they're pointers to the same address
+    
+    // BUT they don't point to the same instance as originalInstance
+    assert(deserialisedInstances[i] == originalInstance.get()); // FALSE! During deserialisation an instance of `T` has been created on the heap!
+}
+````
+
+The following pointers will not be to the same shared instance, despite being deserialised from the same source, because they are created over multiple calls to `esd::Deserialise`.
+````C++
+std::shared_ptr<T> originalInstance = std::make_shared<T>(args...);
+nlohmann::json serialised = esd::Serialise(originalInstance);
+
+// This DOES NOT point to the same instance as originalSharedInstance
+std::shared_ptr<T> deserialisedInstance = esd::DeserialiseWithoutChecks<std::shared_ptr<T>>(serialised);
+
+// This DOES NOT to the same instance as deserialisedSharedInstance
+std::shared_ptr<T> anotherDeserialisedInstance = esd::DeserialiseWithoutChecks<std::shared_ptr<T>>(serialised);
+````
+
 ## Examples
 -----------
 
@@ -114,9 +256,9 @@ void SaveGame(const GameState& state)
 ````
 To load the game state you have two options, the following uses std::optional and offloads the logic required to check if it was succesful to the caller.
 ````C++
-std::optional<GameState> LoadGame(const std::string& filename)
+std::optional<GameState> LoadGame()
 {
-    std::ifstream file(filename);
+    std::ifstream file("save-game.txt");
     nlohmann::json serialisedGameState;
     file >> serialisedGameState;
     return esd::Deserialise<GameState>(serialisedGameState);
@@ -124,15 +266,15 @@ std::optional<GameState> LoadGame(const std::string& filename)
 ````
 The other option is to do the checks ourselves
 ````C++
-void LoadGame(const std::string& filename)
+void LoadGame()
 {
-    std::ifstream file(filename);
+    std::ifstream file("save-game.txt");
     nlohmann::json serialisedGameState;
     file >> serialisedGameState;
     if (esd::Validate<GameState>(serialisedGameState)) {
         LoadGameState(esd::DeserialiseWithoutChecks<GameState>(serialisedGameState));
     } else {
-        std::cout << "Failed to load save from file: " << filename << std::endl;
+        std::cout << "Failed to load save from save-game.txt" << std::endl;
     }
 }
 ````
@@ -277,7 +419,7 @@ class GrandChildType : public ChildTypeA;
 
 Each type needs to have a `Serialiser` specialisation. This step is identical to supporting non-polymorphic types.
 
-If a specialisation already exists (e.g. your type has nlohmann::json's own `to_json` and `from_json` support, or is a container) then you don't need to define your own specialisation.
+If a specialisation already exists (e.g. your type has nlohmann::json's own `to_json` and `from_json` support, or satisfies `std::ranges::range<T>`) then you don't need to define your own specialisation.
 
 ````C++
 template <>
@@ -303,76 +445,7 @@ Note that ParentType is listed twice in `PolymorphicSet<...>`. The first type in
 class PolymorphismHelper<ParentType> : public PolymorphicSet<ParentType, ParentType, ChildTypeA, ChildTypeB, GrandChildType>{}
 ````
 
-To Serialise and Deserialise these types, you have three options:
-**Firstly**, Non-polymorphically. When using the types directly, you have to be careful of slicing:
-
-````C++
-ChildTypeA childInstance{ 42 };
-nlohmann::json serialised = esd::Serialise(p);
-// Uhoh, we've just sliced, all child typeness has been lost
-ParentType parentInstance = esd::DeserialiseWithoutChecks<ChildTypeA>(serialised);
-// This is still fine though
-ChildTypeA deserialisedChildInstance = esd::DeserialiseWithoutChecks<ChildTypeA>(serialised);
-````
-
-The following wont work because they are trying to reference/point at a tempory
-
-````C++
-ParentType& parentInstance = esd::DeserialiseWithoutChecks<ChildTypeA>(serialised);
-ParentType* parentInstance = &esd::DeserialiseWithoutChecks<ChildTypeA>(serialised);
-````
-
-The following won't work because `Serialiser<ChildTypeA&>` and `Serialiser<ChildTypeA*>` are not defined (and shouldn't be).
-
-````C++
-ParentType& parentInstance = esd::DeserialiseWithoutChecks<ChildTypeA&>(serialised);
-ParentType* parentInstance = esd::DeserialiseWithoutChecks<ChildTypeA*>(serialised);
-````
-
-**Secondly**, polymorphically, the intended usage is via smart pointers
-
-````C++
-std::shared_ptr<ParentType> originalSharedInstance = std::make_shared<GrandChildType>(79);
-nlohmann::json serialised = esd::Serialise(originalSharedInstance);
-// This DOES NOT point to the same instance as originalSharedInstance
-std::shared_ptr<ParentType> deserialisedSharedInstance = esd::DeserialiseWithoutChecks<std::shared_ptr<ParentType>>(serialised);
-// This DOES point to the same instance as deserialisedSharedInstance
-std::shared_ptr<ParentType> anotherSharedInstance = esd::DeserialiseWithoutChecks<std::shared_ptr<ParentType>>(serialised);
-// This DOES NOT point to the same instance as deserialisedSharedInstance
-esd::CacheManager::ClearCaches();
-std::shared_ptr<ParentType> yetAnotherDeserialisedSharedInstance = esd::DeserialiseWithoutChecks<std::shared_ptr<ParentType>>(serialised);
-
-std::unique_ptr<ParentType> originalUniqueInstance = std::make_unique<GrandChildType>(79);
-nlohmann::json serialised = esd::Serialise(originalUniqueInstance);
-std::unique_ptr<ParentType> deserialisedUniqueInstance = esd::DeserialiseWithoutChecks<std::unique_ptr<ParentType>>(serialised);
-````
-
-Something to note is that the serialised forms of `unique_ptr<T>` and `shared_ptr<T>` are not cross-compatable
-
-````C++
-std::unique_ptr<ParentType> originalUniqueInstance = std::make_unique<GrandChildType>(79);
-nlohmann::json serialisedUniquePtr = esd::Serialise(originalUniqueInstance);
-
-// Evaluates to false
-esd::Validate<std::shared_ptr<ParentType>>(serialisedUniquePtr);
-
-// Terminates execution
-// std::shared_ptr<ParentType> deserialisedUniqueInstance = esd::DeserialiseWithoutChecks<std::shared_ptr<ParentType>>(serialised);
-
-// Works because a shared_ptr can be constructed/assigned from a unique_ptr
-std::shared_ptr<ParentType> deserialisedUniqueInstance = esd::DeserialiseWithoutChecks<std::unique_ptr<ParentType>>(serialised);
-````
-
-**Thirdly**, polymorphically via the `esd::PolymorphismHelper<T>::` `ValidatePolymorphic`, `SerialisePolymorphic`, and `DeserialisePolymorphic` functions (The same would work with unique_ptr)
-
-````C++
-std::shared_ptr<ParentType> originalSharedInstance = std::make_shared<GrandChildType>(79);
-nlohmann::json serialised = esd::Serialise(originalSharedInstance);
-// This DOES NOT point to the same instance as originalSharedInstance
-std::shared_ptr<ParentType> deserialisedSharedInstance = esd::PolymorphismHelper<GrandChildType>::DeserialisePolymorphic(serialised);
-// This DOES NOT point to the same instance as deserialisedSharedInstance (the shared_ptr tracking is done inside the `Serialiser<std::shared_ptr<...>>` specialisation)
-std::shared_ptr<ParentType> anotherSharedInstance = esd::PolymorphismHelper<GrandChildType>::DeserialisePolymorphic(serialised);
-````
+Now any `shared_ptr<ParentType>` or `unique_ptr<ParentType>` will correctly serialise to any of the derived types (in this case `ParentType`, `ChildTypeA`, `ChildTypeB`, or `GrandChildType`).
 
 [Back to Index](#Table-of-Contents)
 
@@ -866,17 +939,15 @@ Because the `Serialiser<unique_ptr<T>>` calls `PolymorphismHelper<T>::Deserialis
  [x] Refactor `RegisterInitialisation` to `AddInitialisationCall` so it is clear it can be called multiple times
  [x] Refactor `RegisterChildTypes` to `SetChildTypes` so it is clear it should be called only once
  [x] Refactor `PolmorphicClassHelper` to `PolymorphismHelper`, make it not extend ClassHelper, remove need for a call to SetChildTypes
- [ ] The "Supporting Polymorphic Types" example contains a dense and messy afterthought on how to use polymorphic types. Perhaps add another example which is a simple but complete use case?
- [ ] Attempt to define TypeName<T>() using `typeid.name()`
+ [x] Fix `shared_ptr` caching, it must clear automatically after a call to esd::Deserialise(...). Perhaps make esd::Validate|Serialise|Deserialise user only calls
  [ ] Add tests for polymorphism with a pure virtual base class
- [ ] Check if a std::is_polymorphic<> check on types supported by polymorphism is a good idea (perhaps just the BaseClass and not DerivedTypes?)
  [ ] Push to Github
  [ ] Add some github extensions (test coverage, auto-running tests, linter e.t.c.)
  [ ] Zero warnings
  [ ] 100% test coverage
  [ ] Add to website and link to website in README
  [ ] In the "Adding It To Your Own Project" section, link to one of my projects that uses this library as a complete example
- [ ] MAYBE Overhaul of all function calls to include a `Context fullContext`, with `auto currentContext = fullContext.current();` and `currentContext.AddErrorMessage(...)` or `fullContext.GetSharedPointerCache()` (If The type cannot be copied or moved, it would require an existing value to have context.Next() directly in the next function call, which could automatically pick up the function name for stack tracing e.t.c.?)
+ [ ] MAYBE Overhaul of all function calls to include a `Context fullContext`, with `auto currentContext = fullContext.current();` and `currentContext.AddErrorMessage(...)` or `fullContext.GetSharedPointerCache()` (If The type cannot be copied or moved, it would require an existing value to have context.Next() directly in the next function call, which could automatically pick up the function name for stack tracing e.t.c.?) Perhaps implement a virtual ContextBase that handles error reporting and cache management, presents a generic to/from storage interface and require an extension that implements the to/from storage type. (Or use a Using ContextT = ..., so that we don't need to make all Serialiser::Serialise|Vlidate|Deserialise calls templated)
  [ ] MAYBE As an extension of the Context idea above, use the context to hide the storage format from the API so that non JSON formats could be supported
  [ ] MAYBE POD helper (that would implement the `Configure` function automatically)
  [ ] MAYBE Enum helper that allows the user to set a max and min value, or set allowed values, or set valid flags etc

@@ -18,9 +18,7 @@
 
 namespace esd {
 
-// Hide some internal helpers from the esd namespace
-namespace {
-
+namespace internal {
     /**
      * This concept is used in cases where a factory produces e.g. a shared
      * pointer and we then dereference the output to complete deserialisation.
@@ -44,7 +42,7 @@ namespace {
      */
     template <typename T, typename... ConstructionArgs>
     requires std::is_class_v<T>
-    class InternalHelper;
+    class Implementation;
 
     /**
      * Used to make sure the user isn't trying to read/write to/from class
@@ -72,7 +70,7 @@ namespace {
         std::string parameterKey_;
     };
 
-} // end anon namespace
+} // end namespace internal
 
 /**
  * @brief The ClassHelper class should be extended by the user in order to allow
@@ -102,9 +100,15 @@ namespace {
 template <typename T, typename... ConstructionArgs>
 requires std::is_class_v<T>
       && std::is_destructible_v<T>
-      && (!(... || IsPointerOrReference<ConstructionArgs>))
+      && (!(... || internal::IsPointerOrReference<ConstructionArgs>))
 class ClassHelper {
 public:
+    template <typename ParamT>
+    using Parameter = internal::Parameter<ParamT>;
+
+    template <typename Invocable, typename... InvocableArgs>
+    using ReturnTypeNoCVRef = internal::ReturnTypeNoCVRef<Invocable, InvocableArgs...>;
+
     ///
     /// SetConstruction
     /// ---------------
@@ -545,20 +549,19 @@ public:
      */
     template <typename Invocable>
     requires std::is_invocable_v<Invocable, ConstructionArgs...>
-          && TypeIsDereferencableFrom<T, ReturnTypeNoCVRef<Invocable, ConstructionArgs...>>
-          && IsComparableToNullptr<ReturnTypeNoCVRef<Invocable, ConstructionArgs...>>
+          && internal::TypeIsDereferencableFrom<T, ReturnTypeNoCVRef<Invocable, ConstructionArgs...>>
+          && internal::IsComparableToNullptr<ReturnTypeNoCVRef<Invocable, ConstructionArgs...>>
     [[nodiscard]] static auto DeserialiseInPlace(Invocable factory, const nlohmann::json& toDeserialise) -> ReturnTypeNoCVRef<Invocable, ConstructionArgs...>
     {
         return helper_.DeserialiseInPlace(std::forward<Invocable>(factory), toDeserialise, std::index_sequence_for<ConstructionArgs...>());
     }
 
 private:
-    using HelperType = esd::InternalHelper<T, ConstructionArgs...>;
+    using HelperType = internal::Implementation<T, ConstructionArgs...>;
     static inline HelperType helper_ = [](){ HelperType h; Serialiser<T>::Configure(); return h; }();
 };
 
-// anonymous namespace to hide concepts used only for the HasClassHelperSpecialisation<T> concept
-namespace {
+namespace internal {
     // https://stackoverflow.com/questions/70130735/c-concept-to-check-for-derived-from-template -specialization
     template <template <class...> class Z, class... Args>
     void is_derived_from_specialization_of(const Z<Args...>&);
@@ -567,14 +570,13 @@ namespace {
     concept IsDerivedFromSpecialisationOf = requires(const T& t) {
         is_derived_from_specialization_of<Z>(t);
     };
-} // end anonymous namespace
+} // end namespace internal
 
 // FIXME would be nicer to have this at the top!
 template <typename T>
-concept HasClassHelperSpecialisation = IsDerivedFromSpecialisationOf<Serialiser<T>, ClassHelper>;
+concept HasClassHelperSpecialisation = internal::IsDerivedFromSpecialisationOf<Serialiser<T>, ClassHelper>;
 
-// anonymous namespace to hide the InternalHelper
-namespace {
+namespace internal {
 
 ///
 ///
@@ -585,7 +587,7 @@ namespace {
 ///
 template <typename T, typename... ConstructionArgs>
 requires std::is_class_v<T>
-class InternalHelper {
+class Implementation {
 private:
     /*
      * This struct will store the information required for each member variable
@@ -600,7 +602,7 @@ private:
     };
 
 public:
-    InternalHelper()
+    Implementation()
         : constructionVariables_{}
         , constructor_(nullptr)
         , initialisationCalls_{}
@@ -672,10 +674,10 @@ public:
     {
         using ReturnType = ReturnTypeNoCVRef<Factory, ConstructionArgs...>;
 
-        ReturnType retVal = std::invoke(factory, esd::DeserialiseWithoutChecks<ConstructionArgs>(toDeserialise.at(constructionVariables_.at(Indexes)))...);
+        ReturnType retVal = std::invoke(factory, Serialiser<ConstructionArgs>::Deserialise(toDeserialise.at(constructionVariables_.at(Indexes)))...);
 
         if (retVal != nullptr) {
-            retVal = std::invoke(factory, esd::DeserialiseWithoutChecks<ConstructionArgs>(toDeserialise.at(constructionVariables_.at(Indexes)))...);
+            retVal = std::invoke(factory, Serialiser<ConstructionArgs>::Deserialise(toDeserialise.at(constructionVariables_.at(Indexes)))...);
             T& deserialised = *retVal;
             for (auto& initialiser : initialisationCalls_) {
                 std::invoke(initialiser, toDeserialise, deserialised);
@@ -693,7 +695,7 @@ public:
     {
         constructor_ = [=](const nlohmann::json& serialised) -> T
         {
-            return T{ esd::DeserialiseWithoutChecks<std::remove_cvref_t<ConstructionArgs>>(serialised.at(params.parameterKey_))... };
+            return T{ Serialiser<std::remove_cvref_t<ConstructionArgs>>::Deserialise(serialised.at(params.parameterKey_))... };
         };
 
         (this->constructionVariables_.push_back(params.parameterKey_), ...);
@@ -705,7 +707,7 @@ public:
     {
         interdependantVariablesValidators_.push_back([=, validator = std::forward<Validator>(parameterValidator)](const nlohmann::json& serialised) -> bool
         {
-            return std::invoke(validator, (esd::DeserialiseWithoutChecks<std::remove_cvref_t<ConstructionArgs>>(serialised.at(params.parameterKey_)))...);
+            return std::invoke(validator, (Serialiser<std::remove_cvref_t<ConstructionArgs>>::Deserialise(serialised.at(params.parameterKey_)))...);
         });
 
         SetConstruction(std::move(params)...);
@@ -717,7 +719,7 @@ public:
     {
         constructor_ = [=, factory = std::forward<Factory>(factory)](const nlohmann::json& serialised) -> T
         {
-            return std::invoke(factory, (esd::DeserialiseWithoutChecks<std::remove_cvref_t<FactoryArgs>>(serialised.at(params.parameterKey_)))...);
+            return std::invoke(factory, (Serialiser<std::remove_cvref_t<FactoryArgs>>::Deserialise(serialised.at(params.parameterKey_)))...);
         };
 
         (this->constructionVariables_.push_back(params.parameterKey_), ...);
@@ -730,7 +732,7 @@ public:
     {
         interdependantVariablesValidators_.push_back([=, validator = std::forward<Validator>(parameterValidator)](const nlohmann::json& serialised) -> bool
         {
-            return std::invoke(validator, (esd::DeserialiseWithoutChecks<std::remove_cvref_t<FactoryArgs>>(serialised.at(params.parameterKey_)))...);
+            return std::invoke(validator, (Serialiser<std::remove_cvref_t<FactoryArgs>>::Deserialise(serialised.at(params.parameterKey_)))...);
         });
 
         SetConstruction(std::forward<Factory>(factory), std::move(params)...);
@@ -743,7 +745,7 @@ public:
     {
         initialisationCalls_.push_back([=](const nlohmann::json& serialised, T& target) -> void
         {
-            std::invoke(initialisationCall, target, esd::DeserialiseWithoutChecks<Ts>(serialised.at(std::string(params.parameterKey_)))...);
+            std::invoke(initialisationCall, target, Serialiser<Ts>::Deserialise(serialised.at(std::string(params.parameterKey_)))...);
         });
     }
 
@@ -761,7 +763,7 @@ public:
     {
         interdependantVariablesValidators_.push_back([=, validator = std::forward<Validator>(parameterValidator)](const nlohmann::json& serialised) -> bool
         {
-            return std::invoke(validator, (esd::DeserialiseWithoutChecks<Ts>(serialised.at(params.parameterKey_)))...);
+            return std::invoke(validator, (Serialiser<Ts>::Deserialise(serialised.at(params.parameterKey_)))...);
         });
 
         AddInitialisationCall(initialisationCall, std::move(params)...);
@@ -798,7 +800,7 @@ public:
 
         auto setterWrapper = [getterAndSetter](const nlohmann::json& source, T& target)
         {
-            std::invoke(getterAndSetter, target) = esd::DeserialiseWithoutChecks<ParamType>(source);
+            std::invoke(getterAndSetter, target) = Serialiser<ParamType>::Deserialise(source);
         };
 
         RegisterVariableInternal<MemberObjectPointer, decltype(setterWrapper), ParamType>(std::move(getterAndSetter), std::move(setterWrapper), std::move(label), std::move(customValidator));
@@ -813,7 +815,7 @@ public:
 
         RegisterVariableInternal<Getter, Setter, ParamType>(std::move(getter), [=](const nlohmann::json& source, T& target)
         {
-            std::invoke(setter, target, esd::DeserialiseWithoutChecks<ParamType>(source));
+            std::invoke(setter, target, Serialiser<ParamType>::Deserialise(source));
         }, std::move(label), std::move(customValidator));
     }
 
@@ -826,7 +828,7 @@ public:
 
         RegisterVariableInternal<Getter, Setter, ParamType>(std::move(getter), [=](const nlohmann::json& source, T& target)
         {
-            std::invoke(setter, target, esd::DeserialiseWithoutChecks<ParamType>(source));
+            std::invoke(setter, target, Serialiser<ParamType>::Deserialise(source));
         }, std::move(label), std::move(customValidator));
     }
 
@@ -883,15 +885,15 @@ private:
                                              { [=](const T& source, nlohmann::json& target)
                                                {
                                                    if constexpr (std::is_invocable_v<Invocable, const T&>) {
-                                                       target[label.value()] = esd::Serialise<ParameterType>(std::invoke(valueGetter, source));
+                                                       target[label.value()] = Serialiser<ParameterType>::Serialise(std::invoke(valueGetter, source));
                                                    } else if constexpr (std::is_invocable_v<Invocable>) {
-                                                       target[label.value()] = esd::Serialise<ParameterType>(std::invoke(valueGetter));
+                                                       target[label.value()] = Serialiser<ParameterType>::Serialise(std::invoke(valueGetter));
                                                    }
                                                } },
                                              { [=, customValidator = std::move(customValidator)](const nlohmann::json& serialisedVariable) -> bool
                                                {
                                                    bool hasCustomValidator = customValidator.has_value();
-                                                   return esd::Validate<ParameterType>(serialisedVariable) && (!hasCustomValidator || std::invoke(customValidator.value(), esd::DeserialiseWithoutChecks<ParameterType>(serialisedVariable)));
+                                                   return Serialiser<ParameterType>::Validate(serialisedVariable) && (!hasCustomValidator || std::invoke(customValidator.value(), Serialiser<ParameterType>::Deserialise(serialisedVariable)));
                                                } },
                                              { [=](const nlohmann::json&, T&)
                                                {
@@ -919,22 +921,22 @@ private:
                                              { [=](const T& source, nlohmann::json& target)
                                                {
                                                    if constexpr (std::is_invocable_v<InvocableGetter, const T&>) {
-                                                       target[label.value()] = esd::Serialise<ParameterType>(std::invoke(valueGetter, source));
+                                                       target[label.value()] = Serialiser<ParameterType>::Serialise(std::invoke(valueGetter, source));
                                                    } else if constexpr (std::is_invocable_v<InvocableGetter>) {
-                                                       target[label.value()] = esd::Serialise<ParameterType>(std::invoke(valueGetter));
+                                                       target[label.value()] = Serialiser<ParameterType>::Serialise(std::invoke(valueGetter));
                                                    }
                                                } },
                                              { [=, customValidator = std::move(customValidator)](const nlohmann::json& serialisedVariable) -> bool
                                                {
                                                    bool hasCustomValidator = customValidator.has_value();
-                                                   return esd::Validate<ParameterType>(serialisedVariable) && (!hasCustomValidator || std::invoke(customValidator.value(), esd::DeserialiseWithoutChecks<ParameterType>(serialisedVariable)));
+                                                   return Serialiser<ParameterType>::Validate(serialisedVariable) && (!hasCustomValidator || std::invoke(customValidator.value(), Serialiser<ParameterType>::Deserialise(serialisedVariable)));
                                                } },
                                              std::move(valueSetter)
                                          }));
     }
 };
 
-} // end anon namespace
+} // end namespace internal
 
 } // end namespace esd
 
