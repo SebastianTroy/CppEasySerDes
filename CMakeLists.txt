@@ -19,6 +19,7 @@ include(catch2)
 add_library(CppEasySerDes INTERFACE
     EasySerDes.h
     esd/Core.h
+    esd/CurrentContext.h
     esd/BuiltInTypeSupport.h
     esd/StdLibSupport.h
     esd/JsonHelpers.h

@@ -239,6 +239,26 @@ std::shared_ptr<T> deserialisedInstance = esd::DeserialiseWithoutChecks<std::sha
 std::shared_ptr<T> anotherDeserialisedInstance = esd::DeserialiseWithoutChecks<std::shared_ptr<T>>(serialised);
 ````
 
+
+This can be overcome if necessary by using an `esd::ContextStateLifetime`. As long as any `esd::ContextStateLifetime` instance exists anywhere, the internal caches will be preserved. This means that if multiple are created, the caches to be only cleared when the final one is destroyed.
+
+````C++
+std::shared_ptr<T> originalInstance = std::make_shared<T>(args...);
+nlohmann::json serialised = esd::Serialise(originalInstance);
+
+{
+    esd::ContextStateLifetime scopedLifetime;
+
+    // These pointers now point to the same shared instance
+    std::shared_ptr<T> deserialisedInstance = esd::DeserialiseWithoutChecks<std::shared_ptr<T>>(serialised);
+    std::shared_ptr<T> anotherDeserialisedInstance = esd::DeserialiseWithoutChecks<std::shared_ptr<T>>(serialised);
+}
+
+// `scopedLifetime` has gone out of scope, so now this pointer is to a new instance
+std::shared_ptr<T> lastDeserialisedInstance = esd::DeserialiseWithoutChecks<std::shared_ptr<T>>(serialised);
+
+````
+
 ## Examples
 -----------
 
@@ -925,21 +945,15 @@ Because the `Serialiser<unique_ptr<T>>` calls `PolymorphismHelper<T>::Deserialis
 ## TODO
 -------
 
- [x] Add tests
  [x] Support std library types
+ [x] Add tests
+ [x] Create `ClassHelper` type to simplify support of user types
  [x] Support Polymorphism
- [x] Adjust the content of this README to match the table of content
  [ ] Inline Documentation of why I've created various types and functions, with intended purpose
- [x] Hide HelperType from the user, implement static passthrough methods inside `esd::JsonClassHelper` itself, hide the `HelperType` from the user
- [x] Create an `esd` directory and move all headers into it, renaming them to remove the `EasySerDes` prefix (except EasySerDes.h!)
- [x] Remove Json prefixes from type and header names
- [x] Change type names to match header names
- [x] Refactor `void SetupHelper()` to `void Configure()`
- [x] Refactor `RegisterConstruction` to `SetConstruction` so it is clear it should only be called once
- [x] Refactor `RegisterInitialisation` to `AddInitialisationCall` so it is clear it can be called multiple times
- [x] Refactor `RegisterChildTypes` to `SetChildTypes` so it is clear it should be called only once
- [x] Refactor `PolmorphicClassHelper` to `PolymorphismHelper`, make it not extend ClassHelper, remove need for a call to SetChildTypes
- [x] Fix `shared_ptr` caching, it must clear automatically after a call to esd::Deserialise(...). Perhaps make esd::Validate|Serialise|Deserialise user only calls
+ [x] Refactor project structure, `esd` directory for includes, remove the `EasySerDes` filename prefix
+ [x] Refactor to remove Json prefixes from type and header names
+ [x] Create a CurrentContext type and use it to store all caches
+ [ ] Extend CurrentContext to include error reporting
  [ ] Add tests for polymorphism with a pure virtual base class
  [ ] Push to Github
  [ ] Add some github extensions (test coverage, auto-running tests, linter e.t.c.)
@@ -947,10 +961,11 @@ Because the `Serialiser<unique_ptr<T>>` calls `PolymorphismHelper<T>::Deserialis
  [ ] 100% test coverage
  [ ] Add to website and link to website in README
  [ ] In the "Adding It To Your Own Project" section, link to one of my projects that uses this library as a complete example
- [ ] MAYBE Overhaul of all function calls to include a `Context fullContext`, with `auto currentContext = fullContext.current();` and `currentContext.AddErrorMessage(...)` or `fullContext.GetSharedPointerCache()` (If The type cannot be copied or moved, it would require an existing value to have context.Next() directly in the next function call, which could automatically pick up the function name for stack tracing e.t.c.?) Perhaps implement a virtual ContextBase that handles error reporting and cache management, presents a generic to/from storage interface and require an extension that implements the to/from storage type. (Or use a Using ContextT = ..., so that we don't need to make all Serialiser::Serialise|Vlidate|Deserialise calls templated)
- [ ] MAYBE As an extension of the Context idea above, use the context to hide the storage format from the API so that non JSON formats could be supported
  [ ] MAYBE POD helper (that would implement the `Configure` function automatically)
- [ ] MAYBE Enum helper that allows the user to set a max and min value, or set allowed values, or set valid flags etc
- [ ] MAYBE seperate the `nlohmann::json` requirement from the API, would need an API with some std::library default impl, optional nlohmann impl, and ability for end user to create their own to easily serialise to any format and back, would need to pass as a templateparam, as it dictates the return type and parameter types of various functions...
+ [ ] MAYBE Enum helper that allows the user to set a max and min value, or set allowed values, or set valid flags etc (and would implement the `Configure` function automatically)
+ [ ] MAYBE Flags helper, like enum helper but also allows values which are enum values or'd together (and would implement the `Configure` function automatically)
+ [ ] MAYBE use CurrentContext to abstract the underlying storage type
+ [ ] MAYBE if underlying storage type is abstracted, use CurrentContext as ContextBase, and create "json" directory with JsonContext, and make CMAKE variable to exclude it unless requested
+ [ ] MAYBE if JsonContext created, implement a basic std library class that extends ContextBase
 
 [Back to Index](#Table-of-Contents)

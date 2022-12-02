@@ -20,31 +20,6 @@ namespace esd {
 
 namespace internal {
 
-    /**
-     * Returns a nicer and more consistent name than typeid(T).name().
-     */
-    template <typename T>
-    [[ nodiscard ]] constexpr std::string_view TypeName()
-    {
-        std::string_view name, prefix, suffix;
-#ifdef __clang__
-        name = __PRETTY_FUNCTION__;
-        prefix = "std::string_view (anonymous namespace)::TypeName() [T = ";
-        suffix = "]";
-#elif defined(__GNUC__)
-        name = __PRETTY_FUNCTION__;
-        prefix = "constexpr std::string_view {anonymous}::TypeName() [with T = ";
-        suffix = "; std::string_view = std::basic_string_view<char>]";
-#elif defined(_MSC_VER)
-        name = __FUNCSIG__;
-        prefix = "class std::basic_string_view<char,struct std::char_traits<char> > __cdecl `anonymous-namespace'::TypeName<";
-        suffix = ">(void)";
-#endif
-        name.remove_prefix(prefix.size());
-        name.remove_suffix(suffix.size());
-        return name;
-    }
-
     template <typename T, typename...Ts>
     concept IsDerivedFromAtLeastOneOfExcludingSelf = (... || (!std::same_as<T, Ts> && std::derived_from<Ts, T>));
 

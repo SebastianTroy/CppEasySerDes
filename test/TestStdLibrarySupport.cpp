@@ -204,7 +204,7 @@ TEST_CASE("StdLibTypes", "[json]")
             REQUIRE(*pointers.second == *deserialisedPtrs.second);
         }
 
-        SECTION("Don't preserve sharedness between seperate Deserialise calls")
+        SECTION("Don't preserve sharedness between seperate Deserialise calls by default")
         {
             auto sharedPtr1 = std::make_shared<int>(42);
             auto sharedPtr2 = sharedPtr1;
@@ -223,6 +223,28 @@ TEST_CASE("StdLibTypes", "[json]")
             REQUIRE(sharedPtr1 != deserialisedSharedPtr1);
             REQUIRE(sharedPtr2 != deserialisedSharedPtr2);
             REQUIRE(deserialisedSharedPtr1 != deserialisedSharedPtr2);
+        }
+
+        SECTION("Preserve sharedness between seperate Deserialise calls when the user wants it")
+        {
+            auto sharedPtr1 = std::make_shared<int>(42);
+            auto sharedPtr2 = sharedPtr1;
+
+            REQUIRE(reinterpret_cast<uintptr_t>(sharedPtr1.get()) == reinterpret_cast<uintptr_t>(sharedPtr2.get()));
+
+            auto serialised1 = esd::Serialise(sharedPtr1);
+            auto serialised2 = esd::Serialise(sharedPtr2);
+
+            REQUIRE(serialised1 == serialised2);
+
+            esd::ContextStateLifetime lifetimeExtender;
+            auto deserialisedSharedPtr1 = esd::DeserialiseWithoutChecks<decltype(sharedPtr1)>(serialised1);
+            auto deserialisedSharedPtr2 = esd::DeserialiseWithoutChecks<decltype(sharedPtr2)>(serialised2);
+
+            REQUIRE(sharedPtr1 == sharedPtr2);
+            REQUIRE(sharedPtr1 != deserialisedSharedPtr1);
+            REQUIRE(sharedPtr2 != deserialisedSharedPtr2);
+            REQUIRE(deserialisedSharedPtr1 == deserialisedSharedPtr2);
         }
 
         SECTION("Don't add sharedness to identical values")

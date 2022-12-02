@@ -1,6 +1,8 @@
 #ifndef EASYSERDESCORE_H
 #define EASYSERDESCORE_H
 
+#include "CurrentContext.h"
+
 #include <nlohmann/json.hpp>
 
 #include <optional>
@@ -50,87 +52,44 @@ template <typename T>
 concept TypeSupportedByEasySerDes = requires { Serialiser<T>{}; } && std::same_as<T, std::remove_cvref_t<T>>;
 
 ///
-/// Forward Declare API functions
+/// API functions
 ///
 
 /**
  * Returns true if Deserialise into an instance of T will succeed on the given
  * json.
+ *
+ * User can pass a ScopedContextReset to prevent esd::CurrentContext being reset
+ * at the end of this call.
  */
 template <typename T> requires TypeSupportedByEasySerDes<T>
-bool Validate(const nlohmann::json& serialised);
-
-/**
- * Converts instance of type T into json
- */
-template <typename T> requires TypeSupportedByEasySerDes<T>
-nlohmann::json Serialise(const T& value);
-
-/**
- * Converts valid json into an instance of std::optional<T> or a std::nullopt if
- * the json is not a valid representation of an instance of type T.
- */
-template <typename T> requires TypeSupportedByEasySerDes<T>
-std::optional<T> Deserialise(const nlohmann::json& serialised);
-
-/**
- * Converts valid json into an instance of type T or if it is invalid,
- * terminates execution of the program.
- */
-template <typename T> requires TypeSupportedByEasySerDes<T>
-T DeserialiseWithoutChecks(const nlohmann::json& serialised);
-
-/**
- * Some Serialiser<T> types may need to track information within a single
- * user call to Deserialise (e.g. shared_ptr ideally should not create
- * duplicates of objects that were saved from a single instance).
- */
-class CacheManager {
-public:
-    struct ClearCachesAtEndOfScope {
-        ~ClearCachesAtEndOfScope()
-        {
-            CacheManager::ClearCaches();
-        }
-    };
-
-    static void AddEndOfOperationCallback(std::function<void()>&& cacheClearingcallback)
-    {
-        cacheClearingCallbacks.push_back(std::move(cacheClearingcallback));
-    }
-
-private:
-    static inline std::vector<std::function<void()>> cacheClearingCallbacks{};
-
-    static void ClearCaches()
-    {
-        for (auto& callback : cacheClearingCallbacks) {
-            std::invoke(callback);
-        }
-    }
-};
-
-///
-/// Implementation of API functions
-///
-
-template <typename T> requires TypeSupportedByEasySerDes<T>
-bool Validate(const nlohmann::json& serialised)
+bool Validate(const nlohmann::json& serialised, [[maybe_unused]] const ContextStateLifetime& = {})
 {
     return Serialiser<T>::Validate(serialised);
 }
 
+/**
+ * Converts instance of type T into json
+ *
+ * User can pass a ScopedContextReset to prevent esd::CurrentContext being reset
+ * at the end of this call.
+ */
 template <typename T> requires TypeSupportedByEasySerDes<T>
-nlohmann::json Serialise(const T& value)
+nlohmann::json Serialise(const T& value, [[maybe_unused]] const ContextStateLifetime& = {})
 {
     return Serialiser<T>::Serialise(value);
 }
 
+/**
+ * Converts valid json into an instance of std::optional<T> or a std::nullopt if
+ * the json is not a valid representation of an instance of type T.
+ *
+ * User can pass a ScopedContextReset to prevent esd::CurrentContext being reset
+ * at the end of this call.
+ */
 template <typename T> requires TypeSupportedByEasySerDes<T>
-std::optional<T> Deserialise(const nlohmann::json& serialised)
+std::optional<T> Deserialise(const nlohmann::json& serialised, [[maybe_unused]] const ContextStateLifetime& = {})
 {
-    CacheManager::ClearCachesAtEndOfScope c;
-
     if (Serialiser<T>::Validate(serialised)) {
         return std::make_optional(Serialiser<T>::Deserialise(serialised));
     } else {
@@ -138,11 +97,16 @@ std::optional<T> Deserialise(const nlohmann::json& serialised)
     }
 }
 
+/**
+ * Converts valid json into an instance of type T or if it is invalid,
+ * terminates execution of the program.
+ *
+ * User can pass a ScopedContextReset to prevent esd::CurrentContext being reset
+ * at the end of this call.
+ */
 template <typename T> requires TypeSupportedByEasySerDes<T>
-T DeserialiseWithoutChecks(const nlohmann::json& serialised)
+T DeserialiseWithoutChecks(const nlohmann::json& serialised, [[maybe_unused]] const ContextStateLifetime& = {})
 {
-    CacheManager::ClearCachesAtEndOfScope c;
-
     return Serialiser<T>::Deserialise(serialised);
 }
 

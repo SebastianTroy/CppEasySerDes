@@ -420,15 +420,17 @@ private:
         std::map<std::string, std::weak_ptr<T>> variations;
     };
 
-    static inline std::string uniqueIdentifierKey = "ptr";
+    using CacheType = std::map<std::uintptr_t, PointerInfo>;
 
-    static inline std::map<std::uintptr_t, PointerInfo> cachedPointers_{};
+    static inline std::string uniqueIdentifierKey = "ptr";
+    static inline std::string cacheName = "shared_ptr";
 
     static std::shared_ptr<T> CheckCache(const nlohmann::json& serialised)
     {
         std::uintptr_t pointerValue = serialised.at(uniqueIdentifierKey).get<std::uintptr_t>();
-        if (cachedPointers_.contains(pointerValue)) {
-            PointerInfo& ptrInfo = cachedPointers_.at(pointerValue);
+        auto& cachedPointers = internal::CurrentContext::GetCache<CacheType>(cacheName);
+        if (cachedPointers.contains(pointerValue)) {
+            PointerInfo& ptrInfo = cachedPointers.at(pointerValue);
             std::string key = serialised.at(wrappedTypeKey).dump();
             if (ptrInfo.variations.contains(key)) {
                 std::weak_ptr<T> weakPtr = ptrInfo.variations.at(key);
@@ -442,19 +444,10 @@ private:
 
     static void AddToCache(const nlohmann::json& serialised, const std::shared_ptr<T>& toCache)
     {
-        // TODO perhaps there is a nicer way to do this?
-        static bool cacheClearCallbackRegistered = false;
-        if (!cacheClearCallbackRegistered) {
-            esd::CacheManager::AddEndOfOperationCallback([]()
-            {
-                cachedPointers_.clear();
-            });
-            cacheClearCallbackRegistered = true;
-        }
-
         std::uintptr_t pointerValue = serialised.at(uniqueIdentifierKey).get<std::uintptr_t>();
         const nlohmann::json& serialisedValue = serialised.at(wrappedTypeKey);
-        cachedPointers_[pointerValue].variations[serialisedValue.dump()] = toCache;
+        CacheType& cachedPointers = internal::CurrentContext::GetCache<CacheType>(cacheName);
+        cachedPointers[pointerValue].variations[serialisedValue.dump()] = toCache;
     }
 };
 
