@@ -6,7 +6,14 @@
 
 #include <iostream>
 
-class BaseTestType {
+class PureVirtualInterface {
+public:
+    virtual ~PureVirtualInterface(){}
+    virtual int GetVal() const = 0;
+    bool operator==(const PureVirtualInterface& other) const = default;
+};
+
+class BaseTestType : public PureVirtualInterface {
 public:
     constexpr static int Value = 42;
     double d_;
@@ -150,6 +157,9 @@ public:
                         CreateParameter(&GrandChildTestType::b_));
     }
 };
+
+template<>
+class esd::PolymorphismHelper<PureVirtualInterface> : public esd::PolymorphicSet<PureVirtualInterface, BaseTestType, ChildTestTypeA, ChildTestTypeB, GrandChildTestType> {};
 
 template<>
 class esd::PolymorphismHelper<BaseTestType> : public esd::PolymorphicSet<BaseTestType, BaseTestType, ChildTestTypeA, ChildTestTypeB, GrandChildTestType> {};

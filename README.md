@@ -954,7 +954,7 @@ Because the `Serialiser<unique_ptr<T>>` calls `PolymorphismHelper<T>::Deserialis
  [x] Refactor to remove Json prefixes from type and header names
  [x] Create a CurrentContext type and use it to store all caches
  [ ] Extend CurrentContext to include error reporting
- [ ] Add tests for polymorphism with a pure virtual base class
+ [x] Add tests for polymorphism with a pure virtual base class
  [ ] Push to Github
  [ ] Add some github extensions (test coverage, auto-running tests, linter e.t.c.)
  [ ] Zero warnings

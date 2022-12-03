@@ -100,6 +100,7 @@ namespace internal {
 template <typename T, typename... ConstructionArgs>
 requires std::is_class_v<T>
       && std::is_destructible_v<T>
+      && (!std::is_abstract_v<T>)
       && (!(... || internal::IsPointerOrReference<ConstructionArgs>))
 class ClassHelper {
 public:

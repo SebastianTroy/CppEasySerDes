@@ -307,6 +307,7 @@ private:
 template <typename T>
 requires HasClassHelperSpecialisation<T>
       || requires (T, nlohmann::json j) { { std::make_unique<T>(Serialiser<T>::Deserialise(j)) } -> std::same_as<std::unique_ptr<T>>; }
+      || (std::is_abstract_v<T> && HasPolymorphismHelperSpecialisation<T>)
 class Serialiser<std::unique_ptr<T>> {
 public:
     static bool Validate(const nlohmann::json& serialised)
@@ -344,12 +345,15 @@ public:
              */
             if (PolymorphismHelper<T>::ContainsPolymorphicType(serialised)) {
                 return PolymorphismHelper<T>::DeserialisePolymorphic(serialised);
+            } else if constexpr (std::is_abstract_v<T>) {
+                // TODO add error message here
+                return nullptr;
             }
         }
 
         if constexpr (HasClassHelperSpecialisation<T>) {
             return Serialiser<T>::DeserialiseInPlace([](auto... args){ return std::make_unique<T>(args...); }, serialised);
-        } else if constexpr (!HasClassHelperSpecialisation<T>) {
+        } else if constexpr (TypeSupportedByEasySerDes<T>) {
             return std::make_unique<T>(Serialiser<T>::Deserialise(serialised));
         }
     }
@@ -381,6 +385,7 @@ private:
 template <typename T>
 requires HasClassHelperSpecialisation<T>
       || requires (T, nlohmann::json j) { { std::make_shared<T>(Serialiser<T>::Deserialise(j)) } -> std::same_as<std::shared_ptr<T>>; }
+      || (std::is_abstract_v<T> && HasPolymorphismHelperSpecialisation<T>)
 class Serialiser<std::shared_ptr<T>> {
 public:
     static inline const std::string wrappedTypeKey = "wrappedType";
@@ -408,6 +413,7 @@ public:
         std::shared_ptr<T> ret = CheckCache(serialised);
         if (!ret) {
             // Delegate to unique_ptr to avoid code duplication
+            // TODO this might have performance implications that could be solved by using make_shared directly
             ret = Serialiser<std::unique_ptr<T>>::Deserialise(serialised.at(wrappedTypeKey));
             AddToCache(serialised, ret);
         }

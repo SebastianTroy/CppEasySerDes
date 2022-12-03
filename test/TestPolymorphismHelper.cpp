@@ -120,34 +120,7 @@ TEST_CASE("Polymorphic types treated polymorphically", "[json]")
         REQUIRE(*deserialised == *original);
     }
 
-    SECTION("std::vector<std::shared_ptr>")
-    {
-        std::vector<std::shared_ptr<BaseTestType>> original{std::make_shared<GrandChildTestType>(4532.23465, true),
-                                                            std::make_shared<BaseTestType>(543.2345),
-                                                            std::make_shared<ChildTestTypeA>(9654.321465),
-                                                            std::make_shared<ChildTestTypeB>(64532.898323, false)
-                                                           };
-
-        json serialised = esd::Serialise(original);
-
-        REQUIRE(esd::Validate<decltype(original)>(serialised));
-
-        auto deserialised = esd::DeserialiseWithoutChecks<decltype(original)>(serialised);
-        json deserialisedReserialised = esd::Serialise(deserialised);
-
-        REQUIRE(original.size() == deserialised.size());
-        for (size_t i = 0; i < original.size(); ++i) {
-            auto& originalPtr = original[i];
-            auto& deserialisedPtr = deserialised[i];
-
-            // test this first so failures print out the before and after JSON, instead of a less helpful failed comparison
-            auto objectDataKey = esd::Serialiser<std::shared_ptr<BaseTestType>>::wrappedTypeKey;
-            REQUIRE(deserialisedReserialised.at(i).at(objectDataKey) == serialised.at(i).at(objectDataKey));
-            REQUIRE(*deserialisedPtr == *originalPtr);
-        }
-    }
-
-    SECTION("std::shared_ptr")
+    SECTION("std::shared_ptr<BaseTestType>")
     {
         std::shared_ptr<BaseTestType> original = std::make_unique<ChildTestTypeB>(4532.23465, true);
 
@@ -171,5 +144,85 @@ TEST_CASE("Polymorphic types treated polymorphically", "[json]")
         // test this first so failures print out the before and after JSON, instead of a less helpful failed comparison
         REQUIRE(deserialisedReserialised.at(objectDataKey) == serialised.at(objectDataKey));
         REQUIRE(*deserialised == *original);
+    }
+
+    SECTION("std::vector<std::shared_ptr<BaseTestType>>")
+    {
+        std::vector<std::shared_ptr<BaseTestType>> original{std::make_shared<GrandChildTestType>(4532.23465, true),
+                                                            std::make_shared<BaseTestType>(543.2345),
+                                                            std::make_shared<ChildTestTypeA>(9654.321465),
+                                                            std::make_shared<ChildTestTypeB>(64532.898323, false)
+                                                           };
+
+        json serialised = esd::Serialise(original);
+
+        REQUIRE(esd::Validate<decltype(original)>(serialised));
+
+        auto deserialised = esd::DeserialiseWithoutChecks<decltype(original)>(serialised);
+        json deserialisedReserialised = esd::Serialise(deserialised);
+
+        REQUIRE(original.size() == deserialised.size());
+        for (size_t i = 0; i < original.size(); ++i) {
+            auto& originalPtr = original[i];
+            auto& deserialisedPtr = deserialised[i];
+
+            auto objectDataKey = esd::Serialiser<std::shared_ptr<BaseTestType>>::wrappedTypeKey;
+            // test this first so failures print out the "before and after" JSON, instead of a less helpful failed comparison
+            REQUIRE(deserialisedReserialised.at(i).at(objectDataKey) == serialised.at(i).at(objectDataKey));
+            REQUIRE(*deserialisedPtr == *originalPtr);
+        }
+    }
+
+    SECTION("std::shared_ptr<PureVirtualInterface>")
+    {
+        std::shared_ptr<PureVirtualInterface> original = std::make_unique<ChildTestTypeB>(4532.23465, true);
+
+        auto originalValue = original->GetVal();
+
+        json serialised = esd::Serialise(original);
+        REQUIRE(esd::Validate<std::shared_ptr<PureVirtualInterface>>(serialised));
+
+        // use insider knowledge of how smart pointers are serialised to test manually
+        auto objectDataKey = esd::Serialiser<std::shared_ptr<BaseTestType>>::wrappedTypeKey;
+        // REQUIRE_FALSE(esd::Validate<PureVirtualInterface>(serialised.at(objectDataKey))); Doesn't exist because type is pure virtual
+        REQUIRE_FALSE(esd::Validate<ChildTestTypeB>(serialised.at(objectDataKey)));
+        REQUIRE(esd::PolymorphismHelper<PureVirtualInterface>::ValidatePolymorphic(serialised.at(objectDataKey)));
+
+        std::shared_ptr<PureVirtualInterface> deserialised = esd::DeserialiseWithoutChecks<std::shared_ptr<PureVirtualInterface>>(serialised);
+        json deserialisedReserialised = esd::Serialise(deserialised);
+
+        auto deserialisedValue = deserialised->GetVal();
+        REQUIRE(originalValue == deserialisedValue);
+
+        // test this first so failures print out the before and after JSON, instead of a less helpful failed comparison
+        REQUIRE(deserialisedReserialised.at(objectDataKey) == serialised.at(objectDataKey));
+        REQUIRE(*deserialised == *original);
+    }
+
+    SECTION("std::vector<std::shared_ptr<PureVirtualInterface>>")
+    {
+        std::vector<std::shared_ptr<PureVirtualInterface>> original{std::make_shared<GrandChildTestType>(4532.23465, true),
+                                                                    std::make_shared<BaseTestType>(543.2345),
+                                                                    std::make_shared<ChildTestTypeA>(9654.321465),
+                                                                    std::make_shared<ChildTestTypeB>(64532.898323, false)
+                                                                   };
+
+        json serialised = esd::Serialise(original);
+
+        REQUIRE(esd::Validate<decltype(original)>(serialised));
+
+        auto deserialised = esd::DeserialiseWithoutChecks<decltype(original)>(serialised);
+        json deserialisedReserialised = esd::Serialise(deserialised);
+
+        REQUIRE(original.size() == deserialised.size());
+        for (size_t i = 0; i < original.size(); ++i) {
+            auto& originalPtr = original[i];
+            auto& deserialisedPtr = deserialised[i];
+
+            auto objectDataKey = esd::Serialiser<std::shared_ptr<BaseTestType>>::wrappedTypeKey;
+            // test this first so failures print out the "before and after" JSON, instead of a less helpful failed comparison
+            REQUIRE(deserialisedReserialised.at(i).at(objectDataKey) == serialised.at(i).at(objectDataKey));
+            REQUIRE(*deserialisedPtr == *originalPtr);
+        }
     }
 }

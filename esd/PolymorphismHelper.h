@@ -44,8 +44,7 @@ namespace internal {
  * This is the type that needs to be specialised by the user in order to support
  * a set of related types polymorphially.
  *
- * Note that if the base type is a valid value, it must be repeated in the
- * DerivedTypes parameter-pack
+ * It is intended that the user extends esd::PolymorphicSet
  */
 template <typename T>
 class PolymorphismHelper;
@@ -53,9 +52,14 @@ class PolymorphismHelper;
 template <class T>
 concept HasPolymorphismHelperSpecialisation = requires() { PolymorphismHelper<T>{}; } && std::same_as<T, typename PolymorphismHelper<T>::base_type>;
 
+/**
+ * Note that if the base type is not abstract, it must be repeated in the
+ * DerivedTypes parameter-pack to be considered as an option.
+ */
 template <typename BaseType, typename... DerivedTypes>
 requires std::has_virtual_destructor_v<BaseType>
       && (sizeof...(DerivedTypes) > 0)
+      && (... && !std::is_abstract_v<DerivedTypes>)
       && internal::AllParentTypesHaveVirtualDestructor<DerivedTypes...>
       && (... && std::derived_from<DerivedTypes, BaseType>)
       && (... && TypeSupportedByEasySerDes<DerivedTypes>)
