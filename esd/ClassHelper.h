@@ -18,7 +18,7 @@
 
 namespace esd {
 
-namespace internal {
+namespace detail {
     /**
      * This concept is used in cases where a factory produces e.g. a shared
      * pointer and we then dereference the output to complete deserialisation.
@@ -70,7 +70,7 @@ namespace internal {
         std::string parameterKey_;
     };
 
-} // end namespace internal
+} // end namespace detail
 
 /**
  * @brief The ClassHelper class should be extended by the user in order to allow
@@ -101,14 +101,14 @@ template <typename T, typename... ConstructionArgs>
 requires std::is_class_v<T>
       && std::is_destructible_v<T>
       && (!std::is_abstract_v<T>)
-      && (!(... || internal::IsPointerOrReference<ConstructionArgs>))
+      && (!(... || detail::IsPointerOrReference<ConstructionArgs>))
 class ClassHelper {
 public:
     template <typename ParamT>
-    using Parameter = internal::Parameter<ParamT>;
+    using Parameter = detail::Parameter<ParamT>;
 
     template <typename Invocable, typename... InvocableArgs>
-    using ReturnTypeNoCVRef = internal::ReturnTypeNoCVRef<Invocable, InvocableArgs...>;
+    using ReturnTypeNoCVRef = detail::ReturnTypeNoCVRef<Invocable, InvocableArgs...>;
 
     ///
     /// SetConstruction
@@ -384,7 +384,7 @@ public:
     template <class MemberObjectPointer>
     requires std::is_member_object_pointer_v<MemberObjectPointer>
           && std::is_invocable_v<MemberObjectPointer, T&>
-    static void RegisterVariable(MemberObjectPointer getterAndSetter, std::optional<std::string>&& label = std::nullopt, std::optional<std::function<bool(const ReturnTypeNoCVRef<MemberObjectPointer, T&>&)>>&& customValidator = std::nullopt)
+    static void RegisterVariable(MemberObjectPointer getterAndSetter, std::optional<std::string>&& label = std::nullopt, std::optional<std::function<bool(Context&, const ReturnTypeNoCVRef<MemberObjectPointer, T&>&)>>&& customValidator = std::nullopt)
     {
         helper_.RegisterVariable(getterAndSetter, std::move(label), std::move(customValidator));
     }
@@ -409,7 +409,7 @@ public:
     template <typename Getter, typename Setter>
     requires std::is_invocable_v<Getter, const T&>
           && std::is_invocable_v<Setter, T&, ReturnTypeNoCVRef<Getter, const T&>>
-    static void RegisterVariable(Getter&& getter, Setter&& setter, std::optional<std::string>&& label = std::nullopt, std::optional<std::function<bool(const ReturnTypeNoCVRef<Getter, const T&>&)>>&& customValidator = std::nullopt)
+    static void RegisterVariable(Getter&& getter, Setter&& setter, std::optional<std::string>&& label = std::nullopt, std::optional<std::function<bool(Context&, const ReturnTypeNoCVRef<Getter, const T&>&)>>&& customValidator = std::nullopt)
     {
         helper_.RegisterVariable(std::forward<Getter>(getter), std::forward<Setter>(setter), std::move(label), std::move(customValidator));
     }
@@ -436,7 +436,7 @@ public:
     template <typename Getter, typename Setter>
     requires std::is_invocable_v<Getter>
           && std::is_invocable_v<Setter, T&, ReturnTypeNoCVRef<Getter>>
-    static void RegisterVariable(Getter&& getter, Setter&& setter, std::optional<std::string>&& label = std::nullopt, std::optional<std::function<bool(const ReturnTypeNoCVRef<Getter>&)>>&& customValidator = std::nullopt)
+    static void RegisterVariable(Getter&& getter, Setter&& setter, std::optional<std::string>&& label = std::nullopt, std::optional<std::function<bool(Context&, const ReturnTypeNoCVRef<Getter>&)>>&& customValidator = std::nullopt)
     {
         helper_.RegisterVariable(std::forward<Getter>(getter), std::forward<Setter>(setter), std::move(label), std::move(customValidator));
     }
@@ -491,26 +491,26 @@ public:
     /**
      * Intended to be called by esd::Validate, or esd::Deserialise
      */
-    static bool Validate(const nlohmann::json& serialised)
+    static bool Validate(Context& context, const nlohmann::json& serialised)
     {
-        return helper_.Validate(serialised);
+        return helper_.Validate(context, serialised);
     }
 
     /**
      * Intended to be called by esd::Serialise
      */
-    static nlohmann::json Serialise(const T& value)
+    static nlohmann::json Serialise(Context& context, const T& value)
     {
-        return helper_.Serialise(value);
+        return helper_.Serialise(context, value);
     }
 
     /**
      * Intended to be called by esd::Deserialise, or
      * esd::DeserialiseWithoutChecks
      */
-    static T Deserialise(const nlohmann::json& serialised)
+    static T Deserialise(Context& context, const nlohmann::json& serialised)
     {
-        return helper_.Deserialise(serialised);
+        return helper_.Deserialise(context, serialised);
     }
 
     ///
@@ -550,19 +550,19 @@ public:
      */
     template <typename Invocable>
     requires std::is_invocable_v<Invocable, ConstructionArgs...>
-          && internal::TypeIsDereferencableFrom<T, ReturnTypeNoCVRef<Invocable, ConstructionArgs...>>
-          && internal::IsComparableToNullptr<ReturnTypeNoCVRef<Invocable, ConstructionArgs...>>
-    [[nodiscard]] static auto DeserialiseInPlace(Invocable factory, const nlohmann::json& toDeserialise) -> ReturnTypeNoCVRef<Invocable, ConstructionArgs...>
+          && detail::TypeIsDereferencableFrom<T, ReturnTypeNoCVRef<Invocable, ConstructionArgs...>>
+          && detail::IsComparableToNullptr<ReturnTypeNoCVRef<Invocable, ConstructionArgs...>>
+    [[nodiscard]] static auto DeserialiseInPlace(Context& context, Invocable factory, const nlohmann::json& toDeserialise) -> ReturnTypeNoCVRef<Invocable, ConstructionArgs...>
     {
-        return helper_.DeserialiseInPlace(std::forward<Invocable>(factory), toDeserialise, std::index_sequence_for<ConstructionArgs...>());
+        return helper_.DeserialiseInPlace(context, std::forward<Invocable>(factory), toDeserialise, std::index_sequence_for<ConstructionArgs...>());
     }
 
 private:
-    using HelperType = internal::Implementation<T, ConstructionArgs...>;
+    using HelperType = detail::Implementation<T, ConstructionArgs...>;
     static inline HelperType helper_ = [](){ HelperType h; Serialiser<T>::Configure(); return h; }();
 };
 
-namespace internal {
+namespace detail {
     // https://stackoverflow.com/questions/70130735/c-concept-to-check-for-derived-from-template -specialization
     template <template <class...> class Z, class... Args>
     void is_derived_from_specialization_of(const Z<Args...>&);
@@ -571,13 +571,13 @@ namespace internal {
     concept IsDerivedFromSpecialisationOf = requires(const T& t) {
         is_derived_from_specialization_of<Z>(t);
     };
-} // end namespace internal
+} // end namespace detail
 
 // FIXME would be nicer to have this at the top!
 template <typename T>
-concept HasClassHelperSpecialisation = internal::IsDerivedFromSpecialisationOf<Serialiser<T>, ClassHelper>;
+concept HasClassHelperSpecialisation = detail::IsDerivedFromSpecialisationOf<Serialiser<T>, ClassHelper>;
 
-namespace internal {
+namespace detail {
 
 ///
 ///
@@ -597,9 +597,9 @@ private:
      */
     struct Variable {
     public:
-        std::function<void (const T& source, nlohmann::json& target)> writer_;
-        std::function<bool (const nlohmann::json& serialisedVariable)> validator_;
-        std::function<void (const nlohmann::json& source, T& target)> parser_;
+        std::function<void (Context& context, const T& source, nlohmann::json& target)> writer_;
+        std::function<bool (Context& context, const nlohmann::json& serialisedVariable)> validator_;
+        std::function<void (Context& context, const nlohmann::json& source, T& target)> parser_;
     };
 
 public:
@@ -609,24 +609,24 @@ public:
         , initialisationCalls_{}
         , variables_{}
         , interdependantVariablesValidators_{}
-        , postSerialisationAction_([](const T&, nlohmann::json&) -> void { /* do nothing by default */})
-        , postDeserialisationAction_([](const nlohmann::json&, T&) -> void { /* do nothing by default */})
+        , postSerialisationAction_([](Context&, const T&, nlohmann::json&) -> void { /* do nothing by default */})
+        , postDeserialisationAction_([](Context&, const nlohmann::json&, T&) -> void { /* do nothing by default */})
     {
         // Removes the need for the user to call an empty SetConstruction()
         // in cases where the type is default constructabe and the state is
         // managed by other means
         if constexpr(std::is_default_constructible_v<T>) {
-            constructor_ = [](const nlohmann::json&) -> T { return {}; };
+            constructor_ = [](Context&, const nlohmann::json&) -> T { return {}; };
         }
     }
 
-    [[nodiscard]] bool Validate(const nlohmann::json& json)
+    [[nodiscard]] bool Validate(Context& context, const nlohmann::json& json)
     {
         bool valid = json.is_object();
         if (valid) {
             for (const auto& [ key, jsonValue ] : json.items()) {
                 if (variables_.count(key) == 1) {
-                    if (!variables_.at(key).validator_(jsonValue)) {
+                    if (!variables_.at(key).validator_(context, jsonValue)) {
                         // Value's custom validator failed
                         valid = false;
                     }
@@ -638,32 +638,32 @@ public:
         }
         if (valid) {
             for (const auto& validator : interdependantVariablesValidators_) {
-                valid = valid && std::invoke(validator, json);
+                valid = valid && std::invoke(validator, context, json);
             }
         }
         return valid;
     }
 
-    [[nodiscard]] nlohmann::json Serialise(const T& toSerialise)
+    [[nodiscard]] nlohmann::json Serialise(Context& context, const T& toSerialise)
     {
         nlohmann::json serialised = nlohmann::json::object();
         for (const auto& [ key, memberHelper ] : variables_) {
-            memberHelper.writer_(toSerialise, serialised);
+            memberHelper.writer_(context, toSerialise, serialised);
         }
-        std::invoke(postSerialisationAction_, toSerialise, serialised);
+        std::invoke(postSerialisationAction_, context, toSerialise, serialised);
         return serialised;
     }
 
-    [[nodiscard]] T Deserialise(const nlohmann::json& toDeserialise)
+    [[nodiscard]] T Deserialise(Context& context, const nlohmann::json& toDeserialise)
     {
-        T deserialised = constructor_(toDeserialise);
+        T deserialised = constructor_(context, toDeserialise);
         for (auto& initialiser : initialisationCalls_) {
-            std::invoke(initialiser, toDeserialise, deserialised);
+            std::invoke(initialiser, context, toDeserialise, deserialised);
         }
         for (const auto& [ key, memberHelper ] : variables_) {
-            memberHelper.parser_(toDeserialise.at(key), deserialised);
+            memberHelper.parser_(context, toDeserialise.at(key), deserialised);
         }
-        std::invoke(postDeserialisationAction_, toDeserialise, deserialised);
+        std::invoke(postDeserialisationAction_, context, toDeserialise, deserialised);
         return deserialised;
     }
 
@@ -671,22 +671,22 @@ public:
     requires std::is_invocable_v<Factory, ConstructionArgs...>
           && TypeIsDereferencableFrom<T, ReturnTypeNoCVRef<Factory, ConstructionArgs...>>
           && (sizeof...(ConstructionArgs) == sizeof...(Indexes))
-    [[nodiscard]] auto DeserialiseInPlace(Factory factory, const nlohmann::json& toDeserialise, std::index_sequence<Indexes...>) -> ReturnTypeNoCVRef<Factory, ConstructionArgs...>
+    [[nodiscard]] auto DeserialiseInPlace(Context& context, Factory factory, const nlohmann::json& toDeserialise, std::index_sequence<Indexes...>) -> ReturnTypeNoCVRef<Factory, ConstructionArgs...>
     {
         using ReturnType = ReturnTypeNoCVRef<Factory, ConstructionArgs...>;
 
-        ReturnType retVal = std::invoke(factory, Serialiser<ConstructionArgs>::Deserialise(toDeserialise.at(constructionVariables_.at(Indexes)))...);
+        ReturnType retVal = std::invoke(factory, Serialiser<ConstructionArgs>::Deserialise(context, toDeserialise.at(constructionVariables_.at(Indexes)))...);
 
         if (retVal != nullptr) {
-            retVal = std::invoke(factory, Serialiser<ConstructionArgs>::Deserialise(toDeserialise.at(constructionVariables_.at(Indexes)))...);
+            retVal = std::invoke(factory, Serialiser<ConstructionArgs>::Deserialise(context, toDeserialise.at(constructionVariables_.at(Indexes)))...);
             T& deserialised = *retVal;
             for (auto& initialiser : initialisationCalls_) {
-                std::invoke(initialiser, toDeserialise, deserialised);
+                std::invoke(initialiser, context, toDeserialise, deserialised);
             }
             for (const auto& [ key, memberHelper ] : variables_) {
-                memberHelper.parser_(toDeserialise.at(key), deserialised);
+                memberHelper.parser_(context, toDeserialise.at(key), deserialised);
             }
-            std::invoke(postDeserialisationAction_, toDeserialise, deserialised);
+            std::invoke(postDeserialisationAction_, context, toDeserialise, deserialised);
         }
 
         return retVal;
@@ -694,9 +694,9 @@ public:
 
     void SetConstruction(Parameter<std::remove_cvref_t<ConstructionArgs>>... params)
     {
-        constructor_ = [=](const nlohmann::json& serialised) -> T
+        constructor_ = [=](Context& context, const nlohmann::json& serialised) -> T
         {
-            return T{ Serialiser<std::remove_cvref_t<ConstructionArgs>>::Deserialise(serialised.at(params.parameterKey_))... };
+            return T{ Serialiser<std::remove_cvref_t<ConstructionArgs>>::Deserialise(context, serialised.at(params.parameterKey_))... };
         };
 
         (this->constructionVariables_.push_back(params.parameterKey_), ...);
@@ -706,9 +706,9 @@ public:
     requires std::is_invocable_r_v<bool, Validator, const std::remove_cvref_t<ConstructionArgs>&...>
     void SetConstruction(Parameter<std::remove_cvref_t<ConstructionArgs>>... params, Validator parameterValidator)
     {
-        interdependantVariablesValidators_.push_back([=, validator = std::forward<Validator>(parameterValidator)](const nlohmann::json& serialised) -> bool
+        interdependantVariablesValidators_.push_back([=, validator = std::forward<Validator>(parameterValidator)](Context& context, const nlohmann::json& serialised) -> bool
         {
-            return std::invoke(validator, (Serialiser<std::remove_cvref_t<ConstructionArgs>>::Deserialise(serialised.at(params.parameterKey_)))...);
+            return std::invoke(validator, (Serialiser<std::remove_cvref_t<ConstructionArgs>>::Deserialise(context, serialised.at(params.parameterKey_)))...);
         });
 
         SetConstruction(std::move(params)...);
@@ -718,9 +718,9 @@ public:
     requires std::is_invocable_r_v<T, Factory, FactoryArgs...>
     void SetConstruction(Parameter<std::remove_cvref_t<FactoryArgs>>... params, Factory factory)
     {
-        constructor_ = [=, factory = std::forward<Factory>(factory)](const nlohmann::json& serialised) -> T
+        constructor_ = [=, factory = std::forward<Factory>(factory)](Context& context, const nlohmann::json& serialised) -> T
         {
-            return std::invoke(factory, (Serialiser<std::remove_cvref_t<FactoryArgs>>::Deserialise(serialised.at(params.parameterKey_)))...);
+            return std::invoke(factory, (Serialiser<std::remove_cvref_t<FactoryArgs>>::Deserialise(context, serialised.at(params.parameterKey_)))...);
         };
 
         (this->constructionVariables_.push_back(params.parameterKey_), ...);
@@ -731,9 +731,9 @@ public:
           && std::is_invocable_r_v<T, Factory, FactoryArgs...>
     void SetConstruction(Parameter<std::remove_cvref_t<FactoryArgs>>... params, Factory factory, Validator parameterValidator)
     {
-        interdependantVariablesValidators_.push_back([=, validator = std::forward<Validator>(parameterValidator)](const nlohmann::json& serialised) -> bool
+        interdependantVariablesValidators_.push_back([=, validator = std::forward<Validator>(parameterValidator)](Context& context, const nlohmann::json& serialised) -> bool
         {
-            return std::invoke(validator, (Serialiser<std::remove_cvref_t<FactoryArgs>>::Deserialise(serialised.at(params.parameterKey_)))...);
+            return std::invoke(validator, (Serialiser<std::remove_cvref_t<FactoryArgs>>::Deserialise(context, serialised.at(params.parameterKey_)))...);
         });
 
         SetConstruction(std::forward<Factory>(factory), std::move(params)...);
@@ -744,9 +744,9 @@ public:
           && std::is_invocable_v<MemberFunctionPointer, T&, Ts...>
     void AddInitialisationCall(MemberFunctionPointer initialisationCall, Parameter<Ts>... params)
     {
-        initialisationCalls_.push_back([=](const nlohmann::json& serialised, T& target) -> void
+        initialisationCalls_.push_back([=](Context& context, const nlohmann::json& serialised, T& target) -> void
         {
-            std::invoke(initialisationCall, target, Serialiser<Ts>::Deserialise(serialised.at(std::string(params.parameterKey_)))...);
+            std::invoke(initialisationCall, target, Serialiser<Ts>::Deserialise(context, serialised.at(std::string(params.parameterKey_)))...);
         });
     }
 
@@ -762,9 +762,9 @@ public:
           && std::is_invocable_r_v<bool, Validator, const Ts&...>
     void AddInitialisationCall(Validator parameterValidator, MemberFunctionPointer initialisationCall, Parameter<Ts>... params)
     {
-        interdependantVariablesValidators_.push_back([=, validator = std::forward<Validator>(parameterValidator)](const nlohmann::json& serialised) -> bool
+        interdependantVariablesValidators_.push_back([=, validator = std::forward<Validator>(parameterValidator)](Context& context, const nlohmann::json& serialised) -> bool
         {
-            return std::invoke(validator, (Serialiser<Ts>::Deserialise(serialised.at(params.parameterKey_)))...);
+            return std::invoke(validator, (Serialiser<Ts>::Deserialise(context, serialised.at(params.parameterKey_)))...);
         });
 
         AddInitialisationCall(initialisationCall, std::move(params)...);
@@ -795,13 +795,13 @@ public:
     template <class MemberObjectPointer>
     requires std::is_member_object_pointer_v<MemberObjectPointer>
           && std::is_invocable_v<MemberObjectPointer, T&>
-    void RegisterVariable(MemberObjectPointer getterAndSetter, std::optional<std::string>&& label = std::nullopt, std::optional<std::function<bool(const ReturnTypeNoCVRef<MemberObjectPointer, T&>&)>>&& customValidator = std::nullopt)
+    void RegisterVariable(MemberObjectPointer getterAndSetter, std::optional<std::string>&& label = std::nullopt, std::optional<std::function<bool(Context&, const ReturnTypeNoCVRef<MemberObjectPointer, T&>&)>>&& customValidator = std::nullopt)
     {
         using ParamType = ReturnTypeNoCVRef<MemberObjectPointer, T&>;
 
-        auto setterWrapper = [getterAndSetter](const nlohmann::json& source, T& target)
+        auto setterWrapper = [getterAndSetter](Context& context, const nlohmann::json& source, T& target)
         {
-            std::invoke(getterAndSetter, target) = Serialiser<ParamType>::Deserialise(source);
+            std::invoke(getterAndSetter, target) = Serialiser<ParamType>::Deserialise(context, source);
         };
 
         RegisterVariableInternal<MemberObjectPointer, decltype(setterWrapper), ParamType>(std::move(getterAndSetter), std::move(setterWrapper), std::move(label), std::move(customValidator));
@@ -810,47 +810,47 @@ public:
     template <typename Getter, typename Setter>
     requires std::is_invocable_v<Getter, const T&>
           && std::is_invocable_v<Setter, T&, ReturnTypeNoCVRef<Getter, const T&>>
-    void RegisterVariable(Getter&& getter, Setter&& setter, std::optional<std::string>&& label = std::nullopt, std::optional<std::function<bool(const ReturnTypeNoCVRef<Getter, const T&>&)>>&& customValidator = std::nullopt)
+    void RegisterVariable(Getter&& getter, Setter&& setter, std::optional<std::string>&& label = std::nullopt, std::optional<std::function<bool(Context&, const ReturnTypeNoCVRef<Getter, const T&>&)>>&& customValidator = std::nullopt)
     {
         using ParamType = ReturnTypeNoCVRef<Getter, const T&>;
 
-        RegisterVariableInternal<Getter, Setter, ParamType>(std::move(getter), [=](const nlohmann::json& source, T& target)
+        RegisterVariableInternal<Getter, Setter, ParamType>(std::move(getter), [=](Context& context, const nlohmann::json& source, T& target)
         {
-            std::invoke(setter, target, Serialiser<ParamType>::Deserialise(source));
+            std::invoke(setter, target, Serialiser<ParamType>::Deserialise(context, source));
         }, std::move(label), std::move(customValidator));
     }
 
     template <typename Getter, typename Setter>
     requires std::is_invocable_v<Getter>
           && std::is_invocable_v<Setter, T&, ReturnTypeNoCVRef<Getter>>
-    void RegisterVariable(Getter&& getter, Setter&& setter, std::optional<std::string>&& label = std::nullopt, std::optional<std::function<bool(const ReturnTypeNoCVRef<Getter>&)>>&& customValidator = std::nullopt)
+    void RegisterVariable(Getter&& getter, Setter&& setter, std::optional<std::string>&& label = std::nullopt, std::optional<std::function<bool(Context&, const ReturnTypeNoCVRef<Getter>&)>>&& customValidator = std::nullopt)
     {
         using ParamType = ReturnTypeNoCVRef<Getter>;
 
-        RegisterVariableInternal<Getter, Setter, ParamType>(std::move(getter), [=](const nlohmann::json& source, T& target)
+        RegisterVariableInternal<Getter, Setter, ParamType>(std::move(getter), [=](Context& context, const nlohmann::json& source, T& target)
         {
-            std::invoke(setter, target, Serialiser<ParamType>::Deserialise(source));
+            std::invoke(setter, target, Serialiser<ParamType>::Deserialise(context, source));
         }, std::move(label), std::move(customValidator));
     }
 
-    void DefinePostSerialiseAction(std::function<void (const T&, nlohmann::json&)>&& action)
+    void DefinePostSerialiseAction(std::function<void (Context&, const T&, nlohmann::json&)>&& action)
     {
         postSerialisationAction_ = std::move(action);
     }
 
-    void DefinePostDeserialiseAction(std::function<void (const nlohmann::json&, T&)>&& action)
+    void DefinePostDeserialiseAction(std::function<void (Context&, const nlohmann::json&, T&)>&& action)
     {
         postDeserialisationAction_ = std::move(action);
     }
 
 private:
     std::vector<std::string> constructionVariables_;
-    std::function<T (const nlohmann::json& serialised)> constructor_;
-    std::vector<std::function<void (const nlohmann::json& serialised, T& target)>> initialisationCalls_;
+    std::function<T (Context& context, const nlohmann::json& serialised)> constructor_;
+    std::vector<std::function<void (Context& context, const nlohmann::json& serialised, T& target)>> initialisationCalls_;
     std::map<std::string, Variable> variables_;
-    std::vector<std::function<bool (const nlohmann::json& serialised)>> interdependantVariablesValidators_;
-    std::function<void (const T& t, nlohmann::json& serialised)> postSerialisationAction_;
-    std::function<void (const nlohmann::json& serialised, T& t)> postDeserialisationAction_;
+    std::vector<std::function<bool (Context& context, const nlohmann::json& serialised)>> interdependantVariablesValidators_;
+    std::function<void (Context& context, const T& t, nlohmann::json& serialised)> postSerialisationAction_;
+    std::function<void (Context& context, const nlohmann::json& serialised, T& t)> postDeserialisationAction_;
 
     // Not at all optimal but can never be a program bottleneck so might as well be clear
     std::string GenerateUniqueKey(const std::string& prefix) const
@@ -883,20 +883,20 @@ private:
         }
 
         variables_.insert(std::make_pair(label.value(), Variable{
-                                             { [=](const T& source, nlohmann::json& target)
+                                             { [=](Context& context, const T& source, nlohmann::json& target)
                                                {
                                                    if constexpr (std::is_invocable_v<Invocable, const T&>) {
-                                                       target[label.value()] = Serialiser<ParameterType>::Serialise(std::invoke(valueGetter, source));
+                                                       target[label.value()] = Serialiser<ParameterType>::Serialise(context, std::invoke(valueGetter, source));
                                                    } else if constexpr (std::is_invocable_v<Invocable>) {
-                                                       target[label.value()] = Serialiser<ParameterType>::Serialise(std::invoke(valueGetter));
+                                                       target[label.value()] = Serialiser<ParameterType>::Serialise(context, std::invoke(valueGetter));
                                                    }
                                                } },
-                                             { [=, customValidator = std::move(customValidator)](const nlohmann::json& serialisedVariable) -> bool
+                                             { [=, customValidator = std::move(customValidator)](Context& context, const nlohmann::json& serialisedVariable) -> bool
                                                {
                                                    bool hasCustomValidator = customValidator.has_value();
-                                                   return Serialiser<ParameterType>::Validate(serialisedVariable) && (!hasCustomValidator || std::invoke(customValidator.value(), Serialiser<ParameterType>::Deserialise(serialisedVariable)));
+                                                   return Serialiser<ParameterType>::Validate(context, serialisedVariable) && (!hasCustomValidator || std::invoke(customValidator.value(), Serialiser<ParameterType>::Deserialise(context, serialisedVariable)));
                                                } },
-                                             { [=](const nlohmann::json&, T&)
+                                             { [=](Context& context, const nlohmann::json&, T&)
                                                {
                                                    // Do nothing, this value is handled during construction or a function call
                                                } }
@@ -906,8 +906,8 @@ private:
 
     template <typename InvocableGetter, typename InvocableSetter, typename ParameterType>
     requires (std::is_invocable_r_v<ParameterType, InvocableGetter, const T&> || std::is_invocable_r_v<ParameterType, InvocableGetter>)
-          && std::is_invocable_r_v<void, InvocableSetter, const nlohmann::json&, T&>
-    void RegisterVariableInternal(InvocableGetter&& valueGetter, InvocableSetter&& valueSetter, std::optional<std::string>&& label = std::nullopt, std::optional<std::function<bool(const ParameterType&)>>&& customValidator = std::nullopt)
+          && std::is_invocable_r_v<void, InvocableSetter, Context&, const nlohmann::json&, T&>
+    void RegisterVariableInternal(InvocableGetter&& valueGetter, InvocableSetter&& valueSetter, std::optional<std::string>&& label = std::nullopt, std::optional<std::function<bool(Context& context, const ParameterType&)>>&& customValidator = std::nullopt)
     {
         if (!label.has_value()) {
             // User doesn't care about labels, but we need unique keys for the JSON
@@ -919,25 +919,25 @@ private:
         }
 
         variables_.insert(std::make_pair(std::move(label.value()), Variable{
-                                             { [=](const T& source, nlohmann::json& target)
+                                             { [=](Context& context, const T& source, nlohmann::json& target)
                                                {
                                                    if constexpr (std::is_invocable_v<InvocableGetter, const T&>) {
-                                                       target[label.value()] = Serialiser<ParameterType>::Serialise(std::invoke(valueGetter, source));
+                                                       target[label.value()] = Serialiser<ParameterType>::Serialise(context, std::invoke(valueGetter, source));
                                                    } else if constexpr (std::is_invocable_v<InvocableGetter>) {
-                                                       target[label.value()] = Serialiser<ParameterType>::Serialise(std::invoke(valueGetter));
+                                                       target[label.value()] = Serialiser<ParameterType>::Serialise(context, std::invoke(valueGetter));
                                                    }
                                                } },
-                                             { [=, customValidator = std::move(customValidator)](const nlohmann::json& serialisedVariable) -> bool
+                                             { [=, customValidator = std::move(customValidator)](Context& context, const nlohmann::json& serialisedVariable) -> bool
                                                {
                                                    bool hasCustomValidator = customValidator.has_value();
-                                                   return Serialiser<ParameterType>::Validate(serialisedVariable) && (!hasCustomValidator || std::invoke(customValidator.value(), Serialiser<ParameterType>::Deserialise(serialisedVariable)));
+                                                   return Serialiser<ParameterType>::Validate(context, serialisedVariable) && (!hasCustomValidator || std::invoke(customValidator.value(), context, Serialiser<ParameterType>::Deserialise(context, serialisedVariable)));
                                                } },
                                              std::move(valueSetter)
                                          }));
     }
 };
 
-} // end namespace internal
+} // end namespace detail
 
 } // end namespace esd
 

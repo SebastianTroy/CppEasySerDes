@@ -25,6 +25,7 @@ A library for easy conversion of C++ types to/from JSON, allowing for a concise 
    - [Supporting Polymorphic Types](#Supporting-Polymorphic-Types)
  - [The API](#The-API)
    - [esd namespace Functions](#esd-namespace-Functions)
+   - [esd::Context](#esd-Context)
    - [esd::Serialiser](#esdSerialiser)
    - [esd::ClassHelper](#esdClassHelper)
      - [SetConstruction](#esdClassHelperSetConstruction)
@@ -134,17 +135,17 @@ It is also possible to create custom overloads for non-class types (technically 
 
 ````C++
 class esd::Serialiser<T> {
-    bool Validate(const nlohmann::json& serialised)
+    bool Validate(Context& context, const nlohmann::json& serialised)
     {
         ...
     }
 
-    nlohmann::json Serialise(const T& instance)
+    nlohmann::json Serialise(Context& context, const T& instance)
     {
         ...
     }
 
-    T Deserialise(const nlohmann::json& serialised)
+    T Deserialise(Context& context, const nlohmann::json& serialised)
     {
         ...
     }
@@ -486,6 +487,12 @@ template <typename T> requires TypeSupportedByEasySerDes<T>
 bool Validate(const nlohmann::json& serialised);
 ````
 
+Same as above, except it accepts a context reference, allowing the user to extend the lifetime of a context beyond a single call to the API.
+````C++
+template <typename T> requires TypeSupportedByEasySerDes<T>
+bool Validate(Context& context, const nlohmann::json& serialised);
+````
+
 [Back to Index](#Table-of-Contents)
 
 ##### Serialise
@@ -497,6 +504,12 @@ template <typename T> requires TypeSupportedByEasySerDes<T>
 nlohmann::json Serialise(const T& value);
 ````
 
+Same as above, except it accepts a context reference, allowing the user to extend the lifetime of a context beyond a single call to the API.
+````C++
+template <typename T> requires TypeSupportedByEasySerDes<T>
+nlohmann::json Serialise(Context& contxt, const T& value);
+````
+
 [Back to Index](#Table-of-Contents)
 
 ##### Deserialise
@@ -506,6 +519,12 @@ nlohmann::json Serialise(const T& value);
 ````C++
 template <typename T> requires TypeSupportedByEasySerDes<T>
 std::optional<T> Deserialise(const nlohmann::json& serialised);
+````
+
+Same as above, except it accepts a context reference, allowing the user to extend the lifetime of a context beyond a single call to the API.
+````C++
+template <typename T> requires TypeSupportedByEasySerDes<T>
+std::optional<T> Deserialise(Context& context, const nlohmann::json& serialised);
 ````
 
 [Back to Index](#Table-of-Contents)
@@ -520,6 +539,17 @@ template <typename T> requires TypeSupportedByEasySerDes<T>
 T DeserialiseWithoutChecks(const nlohmann::json& serialised);
 ````
 
+Same as above, except it accepts a context reference, allowing the user to extend the lifetime of a context beyond a single call to the API.
+````C++
+template <typename T> requires TypeSupportedByEasySerDes<T>
+T DeserialiseWithoutChecks(const nlohmann::json& serialised);
+````
+
+[Back to Index](#Table-of-Contents)
+
+### esd::Context
+----------------
+
 [Back to Index](#Table-of-Contents)
 
 ### esd::Serialiser
@@ -532,9 +562,9 @@ It is **NOT RECOMMENDED** that you support your types directly like this, see `e
 template <>
 class esd::Serialiser<T> {
 public:
-    static bool Validate(const nlohmann::json& serialised);
-    static nlohmann::json Serialise(const T& value);
-    static T Deserialise(const nlohmann::json& serialised);
+    static bool Validate(Context& context, const nlohmann::json& serialised);
+    static nlohmann::json Serialise(Context& context, const T& value);
+    static T Deserialise(Context& context, const nlohmann::json& serialised);
 };
 ````
 
@@ -867,7 +897,7 @@ The following code has been cut down for this demonstration.
 template <typename T>
 class esd::Serialiser<std::shared_ptr<T>> {
 public:
-    static std::shared_ptr<T> Deserialise(const nlohmann::json& serialised)
+    static std::shared_ptr<T> Deserialise(Context& context, const nlohmann::json& serialised)
     {
         if constexpr (esd::HasClassHelperSpecialisation<T>) {
             return esd::Serialiser<T>::DeserialiseInPlace([](auto... args){ return std::make_shared<T>(args...); }, serialised.at(wrappedTypeKey));
@@ -952,8 +982,8 @@ Because the `Serialiser<unique_ptr<T>>` calls `PolymorphismHelper<T>::Deserialis
  [ ] Inline Documentation of why I've created various types and functions, with intended purpose
  [x] Refactor project structure, `esd` directory for includes, remove the `EasySerDes` filename prefix
  [x] Refactor to remove Json prefixes from type and header names
- [x] Create a CurrentContext type and use it to store all caches
- [ ] Extend CurrentContext to include error reporting
+ [x] Create a Context type and use it to store all caches
+ [x] Extend Context to include error reporting
  [x] Add tests for polymorphism with a pure virtual base class
  [ ] Push to Github
  [ ] Add some github extensions (test coverage, auto-running tests, linter e.t.c.)
@@ -964,8 +994,9 @@ Because the `Serialiser<unique_ptr<T>>` calls `PolymorphismHelper<T>::Deserialis
  [ ] MAYBE POD helper (that would implement the `Configure` function automatically)
  [ ] MAYBE Enum helper that allows the user to set a max and min value, or set allowed values, or set valid flags etc (and would implement the `Configure` function automatically)
  [ ] MAYBE Flags helper, like enum helper but also allows values which are enum values or'd together (and would implement the `Configure` function automatically)
- [ ] MAYBE use CurrentContext to abstract the underlying storage type
- [ ] MAYBE if underlying storage type is abstracted, use CurrentContext as ContextBase, and create "json" directory with JsonContext, and make CMAKE variable to exclude it unless requested
- [ ] MAYBE if JsonContext created, implement a basic std library class that extends ContextBase
+ [ ] MAYBE use DataOut & DataIn to abstract the underlying storage type
+ [ ] MAYBE if underlying storage type is abstracted, create "json" directory and make CMAKE variable to exclude it unless  nlohman::json is detected
+ [ ] MAYBE if underlying storage type is abstracted, create a std::stream based version that isn't dependant on 3rd parties
+ [ ] MAYBE if underlying storage type is abstracted, create a debugging version with switches and hooks to make debugging easier (perhaps the std one above will be usefull enough for this?)
 
-[Back to Index](#Table-of-Contents)
+[Back to Index](#Table-of-Contents)

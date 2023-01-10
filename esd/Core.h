@@ -1,7 +1,7 @@
 #ifndef EASYSERDESCORE_H
 #define EASYSERDESCORE_H
 
-#include "CurrentContext.h"
+#include "Context.h"
 
 #include <nlohmann/json.hpp>
 
@@ -49,7 +49,18 @@ class Serialiser;
  * an unsupported type is used with it.
  */
 template <typename T>
-concept TypeSupportedByEasySerDes = requires { Serialiser<T>{}; } && std::same_as<T, std::remove_cvref_t<T>>;
+concept TypeSupportedByEasySerDes = std::same_as<T, std::remove_cvref_t<T>> && requires (Context& context, const T& t, const nlohmann::json& dataSource) {
+    { Serialiser<T>::Validate(context, dataSource) } -> std::same_as<bool>;
+    { Serialiser<T>::Serialise(context, t) } -> std::same_as<nlohmann::json>;
+    { Serialiser<T>::Deserialise(context, dataSource) } -> std::same_as<T>;
+};
+
+// Final target
+// template <typename T>
+// concept TypeSupportedByEasySerDes = std::same_as<T, std::remove_cvref_t<T>> && requires (Context& context, DataReader&& reader, DataWriter&& writer, const T& t) {
+//     { Serialiser<T>::Serialise(context, writer, t) } -> std::same_as<void>;
+//     { Serialiser<T>::Deserialise(context, reader) } -> std::same_as<T>;
+// };
 
 ///
 /// API functions
@@ -63,9 +74,9 @@ concept TypeSupportedByEasySerDes = requires { Serialiser<T>{}; } && std::same_a
  * at the end of this call.
  */
 template <typename T> requires TypeSupportedByEasySerDes<T>
-bool Validate(const nlohmann::json& serialised, [[maybe_unused]] const ContextStateLifetime& = {})
+bool Validate(Context& context, const nlohmann::json& serialised)
 {
-    return Serialiser<T>::Validate(serialised);
+    return Serialiser<T>::Validate(context, serialised);
 }
 
 /**
@@ -75,9 +86,9 @@ bool Validate(const nlohmann::json& serialised, [[maybe_unused]] const ContextSt
  * at the end of this call.
  */
 template <typename T> requires TypeSupportedByEasySerDes<T>
-nlohmann::json Serialise(const T& value, [[maybe_unused]] const ContextStateLifetime& = {})
+nlohmann::json Serialise(Context& context, const T& value)
 {
-    return Serialiser<T>::Serialise(value);
+    return Serialiser<T>::Serialise(context, value);
 }
 
 /**
@@ -88,10 +99,10 @@ nlohmann::json Serialise(const T& value, [[maybe_unused]] const ContextStateLife
  * at the end of this call.
  */
 template <typename T> requires TypeSupportedByEasySerDes<T>
-std::optional<T> Deserialise(const nlohmann::json& serialised, [[maybe_unused]] const ContextStateLifetime& = {})
+std::optional<T> Deserialise(Context& context, const nlohmann::json& serialised)
 {
-    if (Serialiser<T>::Validate(serialised)) {
-        return std::make_optional(Serialiser<T>::Deserialise(serialised));
+    if (Serialiser<T>::Validate(context, serialised)) {
+        return std::make_optional(Serialiser<T>::Deserialise(context, serialised));
     } else {
         return std::nullopt;
     }
@@ -105,9 +116,37 @@ std::optional<T> Deserialise(const nlohmann::json& serialised, [[maybe_unused]] 
  * at the end of this call.
  */
 template <typename T> requires TypeSupportedByEasySerDes<T>
-T DeserialiseWithoutChecks(const nlohmann::json& serialised, [[maybe_unused]] const ContextStateLifetime& = {})
+T DeserialiseWithoutChecks(Context& context, const nlohmann::json& serialised)
 {
-    return Serialiser<T>::Deserialise(serialised);
+    return Serialiser<T>::Deserialise(context, serialised);
+}
+
+template <typename T> requires TypeSupportedByEasySerDes<T>
+bool Validate(const nlohmann::json& serialised)
+{
+    Context context;
+    return Validate<T>(context, serialised);
+}
+
+template <typename T> requires TypeSupportedByEasySerDes<T>
+nlohmann::json Serialise(const T& value)
+{
+    Context context;
+    return Serialise<T>(context, value);
+}
+
+template <typename T> requires TypeSupportedByEasySerDes<T>
+std::optional<T> Deserialise(const nlohmann::json& serialised)
+{
+    Context context;
+    return Deserialise<T>(context, serialised);
+}
+
+template <typename T> requires TypeSupportedByEasySerDes<T>
+T DeserialiseWithoutChecks(const nlohmann::json& serialised)
+{
+    Context context;
+    return DeserialiseWithoutChecks<T>(context, serialised);
 }
 
 } // end namespace esd

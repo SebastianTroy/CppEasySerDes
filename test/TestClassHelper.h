@@ -199,9 +199,9 @@ public:
 };
 
 template <typename T, typename... Args>
-concept TypeIsSupported = requires (nlohmann::json j) {
+concept TypeIsSupported = requires (esd::Context& context, nlohmann::json j) {
     { esd::ClassHelper<T, Args...>::SetConstruction(esd::ClassHelper<T, Args...>::CreateParameter(&T::c_, "c")) };
-    { esd::ClassHelper<T, Args...>::Deserialise(j) } -> std::same_as<T>;
+    { esd::ClassHelper<T, Args...>::Deserialise(context, j) } -> std::same_as<T>;
 };
 
 static_assert(TypeIsSupported<TypeWithNormalString, std::string>);

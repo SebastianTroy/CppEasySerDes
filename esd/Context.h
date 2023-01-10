@@ -1,20 +1,14 @@
-#ifndef CURRENTCONTEXT_H
-#define CURRENTCONTEXT_H
+#ifndef CONTEXT_H
+#define CONTEXT_H
 
 #include <map>
 #include <memory>
 #include <any>
+#include <vector>
 
 namespace esd {
 
-/**
- * Users can create an instance of this type in order to maintain context across
- * multiple calls to `esd::Validate`, `esd::Serialise`, `esd::Deserialise`, or
- * `esd::DeserialiseWithoutChecks`.
- */
-class ContextStateLifetime;
-
-namespace internal {
+namespace detail {
 
 /**
  * Returns a nicer and more consistent name than typeid(T).name().
@@ -43,24 +37,26 @@ template <typename T>
     return name;
 }
 
+template <typename T>
+[[ nodiscard ]] std::string TypeNameStr()
+{
+    return std::string(TypeName<T>());
+}
+
+} // end namespace detail
+
 /**
  * Stores information that needs to persist between
  * `Serialiser<T>::Validate/Serialise/Deserialise calls`, but needs to be
  * released between `esd::Validate/Serialise/Deserialise` calls.
- *
- * Optionally the lifetime of this information can be extended by the user via
- * a ScopedContextReset object.
- *
- * TODO use this for error reporting
- * MAYBE use this to abstract the underlying storage format
  */
-class CurrentContext {
+class Context {
 public:
     template <typename CacheType>
     requires std::is_default_constructible_v<CacheType>
-    static CacheType& GetCache(const std::string& cacheName)
+    CacheType& GetCache(const std::string& cacheName)
     {
-        std::string cacheKey = cacheName + "::" + std::string(internal::TypeName<CacheType>());
+        std::string cacheKey = cacheName + "::" + detail::TypeNameStr<CacheType>();
         std::unique_ptr<std::any>& cachePointer = caches_[cacheKey];
         if (cachePointer == nullptr) {
             cachePointer = std::make_unique<std::any>();
@@ -70,44 +66,16 @@ public:
         return std::any_cast<CacheType&>(*cachePointer);
     }
 
-private:
-    static inline std::map<std::string, std::unique_ptr<std::any>> caches_ {};
-
-    friend ContextStateLifetime;
-    static void Reset()
+    void LogError(std::string&& error)
     {
-        caches_.clear();
-    }
-};
-
-} // end namespace internal
-
-/**
- * Resets CurrentContext when the last existing ContextStateLifetime goes out of
- * scope.
- */
-class ContextStateLifetime {
-public:
-    ContextStateLifetime()
-    {
-        ++count;
-    }
-    ContextStateLifetime(const ContextStateLifetime& other) = delete;
-    ContextStateLifetime(ContextStateLifetime&& other) = delete;
-    ContextStateLifetime& operator=(const ContextStateLifetime& other) = delete;
-    ContextStateLifetime& operator=(ContextStateLifetime&& other) = delete;
-
-    ~ContextStateLifetime()
-    {
-        if (--count == 0) {
-            internal::CurrentContext::Reset();
-        }
+        errors_.push_back(std::move(error));
     }
 
 private:
-    static inline int count = 0;
+    std::map<std::string, std::unique_ptr<std::any>> caches_;
+    std::vector<std::string> errors_;
 };
 
 } // end namespace esd
 
-#endif // CURRENTCONTEXT_H
+#endif // CONTEXT_H

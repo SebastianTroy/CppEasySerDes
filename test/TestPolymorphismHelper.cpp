@@ -95,22 +95,24 @@ TEST_CASE("Polymorphic types treated non-polymorphically", "[json]")
 
 TEST_CASE("Polymorphic types treated polymorphically", "[json]")
 {
+    esd::Context c;
+
     SECTION("std::unique_ptr")
     {
         std::unique_ptr<BaseTestType> original = std::make_unique<GrandChildTestType>(4532.23465, true);
 
         auto originalValue = original->GetVal();
 
-        json serialised = esd::Serialise(original);
-        REQUIRE(esd::Validate<std::unique_ptr<BaseTestType>>(serialised));
+        json serialised = esd::Serialise(c, original);
+        REQUIRE(esd::Validate<std::unique_ptr<BaseTestType>>(c, serialised));
 
         // use insider knowledge of how smart pointers are serialised to test manually
-        REQUIRE_FALSE(esd::Validate<BaseTestType>(serialised));
-        REQUIRE_FALSE(esd::Validate<GrandChildTestType>(serialised));
-        REQUIRE(esd::PolymorphismHelper<BaseTestType>::ValidatePolymorphic(serialised));
+        REQUIRE_FALSE(esd::Validate<BaseTestType>(c, serialised));
+        REQUIRE_FALSE(esd::Validate<GrandChildTestType>(c, serialised));
+        REQUIRE(esd::PolymorphismHelper<BaseTestType>::ValidatePolymorphic(c, serialised));
 
-        std::unique_ptr<BaseTestType> deserialised = esd::DeserialiseWithoutChecks<std::unique_ptr<BaseTestType>>(serialised);
-        json deserialisedReserialised = esd::Serialise(deserialised);
+        std::unique_ptr<BaseTestType> deserialised = esd::DeserialiseWithoutChecks<std::unique_ptr<BaseTestType>>(c, serialised);
+        json deserialisedReserialised = esd::Serialise(c, deserialised);
 
         auto deserialisedValue = deserialised->GetVal();
         REQUIRE(originalValue == deserialisedValue);
@@ -126,17 +128,17 @@ TEST_CASE("Polymorphic types treated polymorphically", "[json]")
 
         auto originalValue = original->GetVal();
 
-        json serialised = esd::Serialise(original);
-        REQUIRE(esd::Validate<std::shared_ptr<BaseTestType>>(serialised));
+        json serialised = esd::Serialise(c, original);
+        REQUIRE(esd::Validate<std::shared_ptr<BaseTestType>>(c, serialised));
 
         // use insider knowledge of how smart pointers are serialised to test manually
         auto objectDataKey = esd::Serialiser<std::shared_ptr<BaseTestType>>::wrappedTypeKey;
-        REQUIRE_FALSE(esd::Validate<BaseTestType>(serialised.at(objectDataKey)));
-        REQUIRE_FALSE(esd::Validate<ChildTestTypeB>(serialised.at(objectDataKey)));
-        REQUIRE(esd::PolymorphismHelper<BaseTestType>::ValidatePolymorphic(serialised.at(objectDataKey)));
+        REQUIRE_FALSE(esd::Validate<BaseTestType>(c, serialised.at(objectDataKey)));
+        REQUIRE_FALSE(esd::Validate<ChildTestTypeB>(c, serialised.at(objectDataKey)));
+        REQUIRE(esd::PolymorphismHelper<BaseTestType>::ValidatePolymorphic(c, serialised.at(objectDataKey)));
 
-        std::shared_ptr<BaseTestType> deserialised = esd::DeserialiseWithoutChecks<std::shared_ptr<BaseTestType>>(serialised);
-        json deserialisedReserialised = esd::Serialise(deserialised);
+        std::shared_ptr<BaseTestType> deserialised = esd::DeserialiseWithoutChecks<std::shared_ptr<BaseTestType>>(c, serialised);
+        json deserialisedReserialised = esd::Serialise(c, deserialised);
 
         auto deserialisedValue = deserialised->GetVal();
         REQUIRE(originalValue == deserialisedValue);
@@ -179,17 +181,17 @@ TEST_CASE("Polymorphic types treated polymorphically", "[json]")
 
         auto originalValue = original->GetVal();
 
-        json serialised = esd::Serialise(original);
-        REQUIRE(esd::Validate<std::shared_ptr<PureVirtualInterface>>(serialised));
+        json serialised = esd::Serialise(c, original);
+        REQUIRE(esd::Validate<std::shared_ptr<PureVirtualInterface>>(c, serialised));
 
         // use insider knowledge of how smart pointers are serialised to test manually
         auto objectDataKey = esd::Serialiser<std::shared_ptr<BaseTestType>>::wrappedTypeKey;
-        // REQUIRE_FALSE(esd::Validate<PureVirtualInterface>(serialised.at(objectDataKey))); Doesn't exist because type is pure virtual
-        REQUIRE_FALSE(esd::Validate<ChildTestTypeB>(serialised.at(objectDataKey)));
-        REQUIRE(esd::PolymorphismHelper<PureVirtualInterface>::ValidatePolymorphic(serialised.at(objectDataKey)));
+        // REQUIRE_FALSE(esd::Validate<PureVirtualInterface>(c, serialised.at(objectDataKey))); Doesn't exist because type is pure virtual
+        REQUIRE_FALSE(esd::Validate<ChildTestTypeB>(c, serialised.at(objectDataKey)));
+        REQUIRE(esd::PolymorphismHelper<PureVirtualInterface>::ValidatePolymorphic(c, serialised.at(objectDataKey)));
 
-        std::shared_ptr<PureVirtualInterface> deserialised = esd::DeserialiseWithoutChecks<std::shared_ptr<PureVirtualInterface>>(serialised);
-        json deserialisedReserialised = esd::Serialise(deserialised);
+        std::shared_ptr<PureVirtualInterface> deserialised = esd::DeserialiseWithoutChecks<std::shared_ptr<PureVirtualInterface>>(c, serialised);
+        json deserialisedReserialised = esd::Serialise(c, deserialised);
 
         auto deserialisedValue = deserialised->GetVal();
         REQUIRE(originalValue == deserialisedValue);

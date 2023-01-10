@@ -39,19 +39,19 @@ concept SupportsNlohmannJsonSerialisation = requires (const nlohmann::json& cj, 
 template <SupportsNlohmannJsonSerialisation T>
 class Serialiser<T> {
 public:
-    static bool Validate(const nlohmann::json&)
+    static bool Validate(Context& context, const nlohmann::json&)
     {
         return true;
     }
 
-    static nlohmann::json Serialise(const T& value)
+    static nlohmann::json Serialise(Context& context, const T& value)
     {
         nlohmann::json serialised;
         to_json(serialised, value);
         return serialised;
     }
 
-    static T Deserialise(const nlohmann::json& serialised)
+    static T Deserialise(Context& context, const nlohmann::json& serialised)
     {
         T value;
         from_json(serialised, value);

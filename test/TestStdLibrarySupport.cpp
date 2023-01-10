@@ -30,10 +30,12 @@ concept IsSpecialisationOf = is_specialization_of<T, Z>::value;
 template <typename T>
 void RunTest(T value, json::value_t desiredStorageType = json::value_t::null)
 {
+    esd::Context c;
+
     if constexpr (esd::TypeSupportedByEasySerDes<T>) {
-        auto serialised = esd::Serialise(value);
-        T deserialised = esd::DeserialiseWithoutChecks<T>(serialised);
-        auto reSerialised = esd::Serialise(deserialised);
+        auto serialised = esd::Serialise(c, value);
+        T deserialised = esd::DeserialiseWithoutChecks<T>(c, serialised);
+        auto reSerialised = esd::Serialise(c, deserialised);
 
         // Check this first so that an error displays nicely comparable json structures
         if constexpr (!IsSpecialisationOf<T, std::shared_ptr>) {
@@ -52,8 +54,8 @@ void RunTest(T value, json::value_t desiredStorageType = json::value_t::null)
         } else {
             REQUIRE(deserialised == value);
         }
-        REQUIRE(esd::Validate<T>(serialised));
-        REQUIRE(esd::Validate<T>(reSerialised));
+        REQUIRE(esd::Validate<T>(c, serialised));
+        REQUIRE(esd::Validate<T>(c, reSerialised));
 
         // null type indicates we don't care what the storage type is
         if (desiredStorageType != json::value_t::null) {
@@ -69,8 +71,10 @@ template <typename T, typename InvalidType>
 requires std::same_as<InvalidType, nlohmann::json> || requires (InvalidType t) { { nlohmann::json(t) }; }
 void RunFailureTest(InvalidType invalidValue)
 {
-    REQUIRE(!esd::Validate<T>(invalidValue));
-    REQUIRE(esd::Deserialise<T>(invalidValue) == std::nullopt);
+    esd::Context c;
+
+    REQUIRE(!esd::Validate<T>(c, invalidValue));
+    REQUIRE(esd::Deserialise<T>(c, invalidValue) == std::nullopt);
 }
 
 template <typename T, typename... InvalidValueTs>
@@ -185,13 +189,14 @@ TEST_CASE("StdLibTypes", "[json]")
         RunTest(std::make_shared<std::tuple<int, char, double>>(42, 'f', 0.314), json::value_t::object);
         RunTest(std::shared_ptr<int>(nullptr), json::value_t::object);
 
-        SECTION("Preserve sharedness within a Deserialise calls")
+        SECTION("Preserve sharedness within a single Deserialise call")
         {
             auto pointers = std::make_pair(std::make_shared<int>(42), std::make_shared<int>(42));
             REQUIRE(pointers.first != pointers.second);
 
-            auto serialised = esd::Serialise(pointers);
-            auto deserialisedPtrs = esd::DeserialiseWithoutChecks<decltype(pointers)>(serialised);
+            esd::Context c;
+            auto serialised = esd::Serialise(c, pointers);
+            auto deserialisedPtrs = esd::DeserialiseWithoutChecks<decltype(pointers)>(c, serialised);
 
             REQUIRE(pointers != deserialisedPtrs);
 
@@ -204,7 +209,31 @@ TEST_CASE("StdLibTypes", "[json]")
             REQUIRE(*pointers.second == *deserialisedPtrs.second);
         }
 
-        SECTION("Don't preserve sharedness between seperate Deserialise calls by default")
+        SECTION("Don't preserve sharedness between seperate calls with different contexts")
+        {
+            auto sharedPtr1 = std::make_shared<int>(42);
+            auto sharedPtr2 = sharedPtr1;
+
+            REQUIRE(reinterpret_cast<uintptr_t>(sharedPtr1.get()) == reinterpret_cast<uintptr_t>(sharedPtr2.get()));
+
+            esd::Context c1;
+            auto serialised1 = esd::Serialise(c1, sharedPtr1);
+            esd::Context c2;
+            auto serialised2 = esd::Serialise(c2, sharedPtr2);
+
+            REQUIRE(serialised1 == serialised2);
+
+            auto deserialisedSharedPtr1 = esd::DeserialiseWithoutChecks<decltype(sharedPtr1)>(c1, serialised1);
+            auto deserialisedSharedPtr2 = esd::DeserialiseWithoutChecks<decltype(sharedPtr2)>(c2, serialised2);
+
+            REQUIRE(sharedPtr1 == sharedPtr2);
+            REQUIRE(sharedPtr1 != deserialisedSharedPtr1);
+            REQUIRE(sharedPtr2 != deserialisedSharedPtr2);
+            REQUIRE(deserialisedSharedPtr1 != deserialisedSharedPtr2);
+        }
+
+
+        SECTION("Don't preserve sharedness between seperate calls with no context specified")
         {
             auto sharedPtr1 = std::make_shared<int>(42);
             auto sharedPtr2 = sharedPtr1;
@@ -225,21 +254,21 @@ TEST_CASE("StdLibTypes", "[json]")
             REQUIRE(deserialisedSharedPtr1 != deserialisedSharedPtr2);
         }
 
-        SECTION("Preserve sharedness between seperate Deserialise calls when the user wants it")
+        SECTION("Preserve sharedness between seperate calls when the same context is used")
         {
             auto sharedPtr1 = std::make_shared<int>(42);
             auto sharedPtr2 = sharedPtr1;
 
             REQUIRE(reinterpret_cast<uintptr_t>(sharedPtr1.get()) == reinterpret_cast<uintptr_t>(sharedPtr2.get()));
 
-            auto serialised1 = esd::Serialise(sharedPtr1);
-            auto serialised2 = esd::Serialise(sharedPtr2);
+            esd::Context c;
+            auto serialised1 = esd::Serialise(c, sharedPtr1);
+            auto serialised2 = esd::Serialise(c, sharedPtr2);
 
             REQUIRE(serialised1 == serialised2);
 
-            esd::ContextStateLifetime lifetimeExtender;
-            auto deserialisedSharedPtr1 = esd::DeserialiseWithoutChecks<decltype(sharedPtr1)>(serialised1);
-            auto deserialisedSharedPtr2 = esd::DeserialiseWithoutChecks<decltype(sharedPtr2)>(serialised2);
+            auto deserialisedSharedPtr1 = esd::DeserialiseWithoutChecks<decltype(sharedPtr1)>(c, serialised1);
+            auto deserialisedSharedPtr2 = esd::DeserialiseWithoutChecks<decltype(sharedPtr2)>(c, serialised2);
 
             REQUIRE(sharedPtr1 == sharedPtr2);
             REQUIRE(sharedPtr1 != deserialisedSharedPtr1);
@@ -251,8 +280,9 @@ TEST_CASE("StdLibTypes", "[json]")
         {
             auto pointers = std::make_pair(std::make_shared<int>(42), std::make_shared<int>(42));
 
-            auto serialised = esd::Serialise(pointers);
-            auto deserialisedPtrs = esd::DeserialiseWithoutChecks<decltype(pointers)>(serialised);
+            esd::Context c;
+            auto serialised = esd::Serialise(c, pointers);
+            auto deserialisedPtrs = esd::DeserialiseWithoutChecks<decltype(pointers)>(c, serialised);
 
             // Having the same value didn't cause sharing
             REQUIRE(deserialisedPtrs.first.get() != deserialisedPtrs.second.get());
@@ -262,17 +292,18 @@ TEST_CASE("StdLibTypes", "[json]")
         {
             int testValue = 56743874;
 
+            esd::Context c;
             std::weak_ptr<int> weakPtr;
             nlohmann::json serialised;
             {
                 auto shared = std::make_shared<int>(testValue);
-                serialised = esd::Serialise(shared);
+                serialised = esd::Serialise(c, shared);
                 weakPtr = shared;
             }
 
-            REQUIRE(esd::Validate<std::shared_ptr<int>>(serialised));
+            REQUIRE(esd::Validate<std::shared_ptr<int>>(c, serialised));
 
-            auto deserialised = esd::DeserialiseWithoutChecks<std::shared_ptr<int>>(serialised);
+            auto deserialised = esd::DeserialiseWithoutChecks<std::shared_ptr<int>>(c, serialised);
 
             REQUIRE(*deserialised == testValue);
             REQUIRE(weakPtr.expired());
@@ -285,8 +316,9 @@ TEST_CASE("StdLibTypes", "[json]")
             auto sharedPtr1 = std::make_shared<std::string>(value);
             auto sharedPtr2 = sharedPtr1;
 
-            auto serialised1 = esd::Serialise(sharedPtr1);
-            auto serialised2 = esd::Serialise(sharedPtr2);
+            esd::Context c;
+            auto serialised1 = esd::Serialise(c, sharedPtr1);
+            auto serialised2 = esd::Serialise(c, sharedPtr2);
 
             REQUIRE(serialised1 == serialised2);
 
@@ -298,8 +330,8 @@ TEST_CASE("StdLibTypes", "[json]")
 
             REQUIRE(serialised1 != serialised2);
 
-            auto deserialisedSharedPtr1 = esd::DeserialiseWithoutChecks<decltype(sharedPtr1)>(serialised1);
-            auto deserialisedSharedPtr2 = esd::DeserialiseWithoutChecks<decltype(sharedPtr2)>(serialised2);
+            auto deserialisedSharedPtr1 = esd::DeserialiseWithoutChecks<decltype(sharedPtr1)>(c, serialised1);
+            auto deserialisedSharedPtr2 = esd::DeserialiseWithoutChecks<decltype(sharedPtr2)>(c, serialised2);
 
             REQUIRE(sharedPtr1 != deserialisedSharedPtr1);
             REQUIRE(*sharedPtr1 == *deserialisedSharedPtr1);

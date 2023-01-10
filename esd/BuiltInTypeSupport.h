@@ -33,17 +33,17 @@ namespace esd {
 template <>
 class Serialiser<bool> {
 public:
-    static bool Validate(const nlohmann::json& serialised)
+    static bool Validate(Context& context, const nlohmann::json& serialised)
     {
         return serialised.is_boolean();
     }
 
-    static nlohmann::json Serialise(const bool& value)
+    static nlohmann::json Serialise(Context& context, const bool& value)
     {
         return value;
     }
 
-    static bool Deserialise(const nlohmann::json& serialised)
+    static bool Deserialise(Context& context, const nlohmann::json& serialised)
     {
         return serialised.get<bool>();
     }
@@ -55,17 +55,17 @@ public:
 template <>
 class Serialiser<char> {
 public:
-    static bool Validate(const nlohmann::json& serialised)
+    static bool Validate(Context& context, const nlohmann::json& serialised)
     {
         return serialised.is_string() && serialised.get<std::string>().size() == 1;
     }
 
-    static nlohmann::json Serialise(const char& value)
+    static nlohmann::json Serialise(Context& context, const char& value)
     {
         return std::string{ value };
     }
 
-    static char Deserialise(const nlohmann::json& serialised)
+    static char Deserialise(Context& context, const nlohmann::json& serialised)
     {
         return serialised.get<std::string>()[0];
     }
@@ -78,18 +78,18 @@ template <std::signed_integral T>
 requires (sizeof(T) <= sizeof(nlohmann::json::number_integer_t))
 class Serialiser<T> {
     public:
-    static bool Validate(const nlohmann::json& serialised)
+    static bool Validate(Context& context, const nlohmann::json& serialised)
     {
         using InternalType = nlohmann::json::number_integer_t;
-        return MatchType(nlohmann::json::value_t::number_integer, serialised.type()) && serialised.get<InternalType>() == static_cast<InternalType>(Deserialise(serialised));
+        return MatchType(nlohmann::json::value_t::number_integer, serialised.type()) && serialised.get<InternalType>() == static_cast<InternalType>(Deserialise(context, serialised));
     }
 
-    static nlohmann::json Serialise(const T& value)
+    static nlohmann::json Serialise(Context& context, const T& value)
     {
         return value;
     }
 
-    static T Deserialise(const nlohmann::json& serialised)
+    static T Deserialise(Context& context, const nlohmann::json& serialised)
     {
         return serialised.get<T>();
     }
@@ -102,18 +102,18 @@ template <std::unsigned_integral T>
 requires (sizeof(T) <= sizeof(nlohmann::json::number_unsigned_t))
 class Serialiser<T> {
     public:
-    static bool Validate(const nlohmann::json& serialised)
+    static bool Validate(Context& context, const nlohmann::json& serialised)
     {
         using InternalType = nlohmann::json::number_unsigned_t;
-        return MatchType(nlohmann::json::value_t::number_unsigned, serialised.type()) && serialised.get<InternalType>() == static_cast<InternalType>(Deserialise(serialised));
+        return MatchType(nlohmann::json::value_t::number_unsigned, serialised.type()) && serialised.get<InternalType>() == static_cast<InternalType>(Deserialise(context, serialised));
     }
 
-    static nlohmann::json Serialise(const T& value)
+    static nlohmann::json Serialise(Context& context, const T& value)
     {
         return value;
     }
 
-    static T Deserialise(const nlohmann::json& serialised)
+    static T Deserialise(Context& context, const nlohmann::json& serialised)
     {
         return serialised.get<T>();
     }
@@ -126,18 +126,18 @@ template <std::floating_point T>
 requires (sizeof(T) <= sizeof(nlohmann::json::number_float_t))
 class Serialiser<T> {
 public:
-    static bool Validate(const nlohmann::json& serialised)
+    static bool Validate(Context& context, const nlohmann::json& serialised)
     {
         using InternalType = nlohmann::json::number_float_t;
-        return MatchType(nlohmann::json::value_t::number_float, serialised.type()) && serialised.get<InternalType>() == static_cast<InternalType>(Deserialise(serialised));
+        return MatchType(nlohmann::json::value_t::number_float, serialised.type()) && serialised.get<InternalType>() == static_cast<InternalType>(Deserialise(context, serialised));
     }
 
-    static nlohmann::json Serialise(const T& value)
+    static nlohmann::json Serialise(Context& context, const T& value)
     {
         return value;
     }
 
-    static T Deserialise(const nlohmann::json& serialised)
+    static T Deserialise(Context& context, const nlohmann::json& serialised)
     {
         return serialised.get<T>();
     }
@@ -152,12 +152,12 @@ template <std::signed_integral T>
 requires (sizeof(T) > sizeof(nlohmann::json::number_integer_t))
 class Serialiser<T> {
     public:
-    static bool Validate(const nlohmann::json& serialised)
+    static bool Validate(Context& context, const nlohmann::json& serialised)
     {
         return serialised.type() == nlohmann::json::value_t::string && std::regex_match(serialised.get<std::string>(), validator_);
     }
 
-    static nlohmann::json Serialise(const T& value)
+    static nlohmann::json Serialise(Context& context, const T& value)
     {
         std::stringstream valueStream;
         valueStream.precision(std::numeric_limits<T>::max_digits10);
@@ -165,7 +165,7 @@ class Serialiser<T> {
         return valueStream.str();
     }
 
-    static T Deserialise(const nlohmann::json& serialised)
+    static T Deserialise(Context& context, const nlohmann::json& serialised)
     {
         std::stringstream valueStream(serialised.get<std::string>());
         valueStream.precision(std::numeric_limits<T>::max_digits10);
@@ -189,12 +189,12 @@ template <std::unsigned_integral T>
 requires (sizeof(T) > sizeof(nlohmann::json::number_unsigned_t))
 class Serialiser<T> {
     public:
-    static bool Validate(const nlohmann::json& serialised)
+    static bool Validate(Context& context, const nlohmann::json& serialised)
     {
         return serialised.type() == nlohmann::json::value_t::string && std::regex_match(serialised.get<std::string>(), validator_);
     }
 
-    static nlohmann::json Serialise(const T& value)
+    static nlohmann::json Serialise(Context& context, const T& value)
     {
         std::stringstream valueStream;
         valueStream.precision(std::numeric_limits<T>::max_digits10);
@@ -202,7 +202,7 @@ class Serialiser<T> {
         return valueStream.str();
     }
 
-    static T Deserialise(const nlohmann::json& serialised)
+    static T Deserialise(Context& context, const nlohmann::json& serialised)
     {
         std::stringstream valueStream(serialised.get<std::string>());
         valueStream.precision(std::numeric_limits<T>::max_digits10);
@@ -226,12 +226,12 @@ template <std::floating_point T>
 requires (sizeof(T) > sizeof(nlohmann::json::number_float_t))
 class Serialiser<T> {
 public:
-    static bool Validate(const nlohmann::json& serialised)
+    static bool Validate(Context& context, const nlohmann::json& serialised)
     {
         return serialised.type() == nlohmann::json::value_t::string && std::regex_match(serialised.get<std::string>(), validator_);
     }
 
-    static nlohmann::json Serialise(const T& value)
+    static nlohmann::json Serialise(Context& context, const T& value)
     {
         std::stringstream valueStream;
         valueStream.precision(std::numeric_limits<T>::max_digits10);
@@ -239,7 +239,7 @@ public:
         return valueStream.str();
     }
 
-    static T Deserialise(const nlohmann::json& serialised)
+    static T Deserialise(Context& context, const nlohmann::json& serialised)
     {
         std::stringstream valueStream(serialised.get<std::string>());
         valueStream.precision(std::numeric_limits<T>::max_digits10);
@@ -258,17 +258,17 @@ concept enumeration = std::is_enum_v<T>; // why isn't this in std?
 template <enumeration T>
 class Serialiser<T> {
 public:
-    static bool Validate(const nlohmann::json& serialised)
+    static bool Validate(Context& context, const nlohmann::json& serialised)
     {
-        return Serialiser<std::underlying_type_t<T>>::Validate(serialised);
+        return Serialiser<std::underlying_type_t<T>>::Validate(context, serialised);
     }
 
-    static nlohmann::json Serialise(const T& value)
+    static nlohmann::json Serialise(Context& context, const T& value)
     {
         return std::bit_cast<std::underlying_type_t<T>>(value);
     }
 
-    static T Deserialise(const nlohmann::json& serialised)
+    static T Deserialise(Context& context, const nlohmann::json& serialised)
     {
         return std::bit_cast<T>(serialised.get<std::underlying_type_t<T>>());
     }

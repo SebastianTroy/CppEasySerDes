@@ -18,7 +18,7 @@
 
 namespace esd {
 
-namespace internal {
+namespace detail {
 
     template <typename T, typename...Ts>
     concept IsDerivedFromAtLeastOneOfExcludingSelf = (... || (!std::same_as<T, Ts> && std::derived_from<Ts, T>));
@@ -38,7 +38,7 @@ namespace internal {
     template <typename...Ts>
     concept AllTypesAreUnique = AllTypesAreUniqueRecursive<Ts...>();
 
-} // end namespace internal
+} // end namespace detail
 
 /**
  * This is the type that needs to be specialised by the user in order to support
@@ -60,10 +60,10 @@ template <typename BaseType, typename... DerivedTypes>
 requires std::has_virtual_destructor_v<BaseType>
       && (sizeof...(DerivedTypes) > 0)
       && (... && !std::is_abstract_v<DerivedTypes>)
-      && internal::AllParentTypesHaveVirtualDestructor<DerivedTypes...>
+      && detail::AllParentTypesHaveVirtualDestructor<DerivedTypes...>
       && (... && std::derived_from<DerivedTypes, BaseType>)
       && (... && TypeSupportedByEasySerDes<DerivedTypes>)
-      && internal::AllTypesAreUnique<DerivedTypes...> // Not required but might help catch bugs
+      && detail::AllTypesAreUnique<DerivedTypes...> // Not required but might help catch bugs
 class PolymorphicSet {
 public:
     // Used to sanity check that the T in PolymorphismHelper<T> matches BaseType
@@ -81,14 +81,14 @@ public:
      * Works out which of the DerivedTypes was serialised and calls
      * `esd::Validate<DerivedType>`.
      */
-    static bool ValidatePolymorphic(const nlohmann::json& serialised)
+    static bool ValidatePolymorphic(Context& context, const nlohmann::json& serialised)
     {
         bool valid = serialised.contains(typeNameKey_);
         if (valid) {
             std::string storedTypeName = serialised.at(typeNameKey_);
             auto copy = serialised;
             copy.erase(typeNameKey_);
-            valid = ((storedTypeName == internal::TypeName<DerivedTypes>() && Validate<DerivedTypes>(copy)) || ...);
+            valid = ((storedTypeName == detail::TypeName<DerivedTypes>() && Validate<DerivedTypes>(context, copy)) || ...);
         }
         return valid;
     }
@@ -97,7 +97,7 @@ public:
      * Works out which of the DerivedTypes `value` is an instance of and calls
      * `esd::Serialise<DerivedType>`.
      */
-    static nlohmann::json SerialisePolymorphic(const BaseType& value)
+    static nlohmann::json SerialisePolymorphic(Context& context, const BaseType& value)
     {
         nlohmann::json serialised;
 
@@ -118,8 +118,8 @@ public:
             using CurrentType = DerivedTypes;
 
             if (typeid(CurrentType).name() == typeid(value).name()) {
-                serialised = Serialise(dynamic_cast<const CurrentType&>(value));
-                serialised[typeNameKey_] = internal::TypeName<CurrentType>();
+                serialised = Serialise(context, dynamic_cast<const CurrentType&>(value));
+                serialised[typeNameKey_] = detail::TypeName<CurrentType>();
                 return true; // Stop checking subsequent types
             }
             return false; // Continue checking the other types
@@ -132,7 +132,7 @@ public:
      * Works out which of the DerivedTypes was serialised and calls
      * `esd::Deserialise<std::unique_ptr<DerivedType>>`.
      */
-    static std::unique_ptr<BaseType> DeserialisePolymorphic(const nlohmann::json& serialised)
+    static std::unique_ptr<BaseType> DeserialisePolymorphic(Context& context, const nlohmann::json& serialised)
     {
         std::unique_ptr<BaseType> deserialised = nullptr;
 
@@ -161,8 +161,8 @@ public:
                 // This will be a single type due to parameter pack expansion
                 using CurrentType = DerivedTypes;
 
-                if (storedTypeName == internal::TypeName<CurrentType>()) {
-                    deserialised = DeserialiseWithoutChecks<std::unique_ptr<CurrentType>>(copy);
+                if (storedTypeName == detail::TypeName<CurrentType>()) {
+                    deserialised = DeserialiseWithoutChecks<std::unique_ptr<CurrentType>>(context, copy);
                     return true;
                 }
                 return false;
