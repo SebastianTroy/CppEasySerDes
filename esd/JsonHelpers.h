@@ -36,6 +36,26 @@ concept SupportsNlohmannJsonSerialisation = requires (const nlohmann::json& cj, 
     { from_json(cj, t) } -> std::same_as<void>;
 };
 
+template <>
+class Serialiser<nlohmann::json> {
+public:
+    static bool Validate(Context& context, const nlohmann::json&)
+    {
+        return true;
+    }
+
+    static void Serialise(DataWriter&& writer, const nlohmann::json& value)
+    {
+        writer.SetFormatToValue();
+        writer.Write(value);
+    }
+
+    static nlohmann::json Deserialise(Context& context, const nlohmann::json& serialised)
+    {
+        return serialised;
+    }
+};
+
 template <SupportsNlohmannJsonSerialisation T>
 class Serialiser<T> {
 public:
@@ -44,11 +64,13 @@ public:
         return true;
     }
 
-    static nlohmann::json Serialise(Context& context, const T& value)
+    static void Serialise(DataWriter&& writer, const T& value)
     {
         nlohmann::json serialised;
         to_json(serialised, value);
-        return serialised;
+
+        writer.SetFormatToValue();
+        writer.Write(serialised);
     }
 
     static T Deserialise(Context& context, const nlohmann::json& serialised)

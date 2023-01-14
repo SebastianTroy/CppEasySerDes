@@ -2,6 +2,7 @@
 #define EASYSERDESCORE_H
 
 #include "Context.h"
+#include "DataWriter.h"
 
 #include <nlohmann/json.hpp>
 
@@ -49,17 +50,17 @@ class Serialiser;
  * an unsupported type is used with it.
  */
 template <typename T>
-concept TypeSupportedByEasySerDes = std::same_as<T, std::remove_cvref_t<T>> && requires (Context& context, const T& t, const nlohmann::json& dataSource) {
+concept TypeSupportedByEasySerDes = std::same_as<T, std::remove_cvref_t<T>> && requires (Context& context, const T& t, DataWriter&& writer, const nlohmann::json& dataSource) {
     { Serialiser<T>::Validate(context, dataSource) } -> std::same_as<bool>;
-    { Serialiser<T>::Serialise(context, t) } -> std::same_as<nlohmann::json>;
+    { Serialiser<T>::Serialise(std::move(writer), t) } -> std::same_as<void>;
     { Serialiser<T>::Deserialise(context, dataSource) } -> std::same_as<T>;
 };
 
 // Final target
 // template <typename T>
-// concept TypeSupportedByEasySerDes = std::same_as<T, std::remove_cvref_t<T>> && requires (Context& context, DataReader&& reader, DataWriter&& writer, const T& t) {
-//     { Serialiser<T>::Serialise(context, writer, t) } -> std::same_as<void>;
-//     { Serialiser<T>::Deserialise(context, reader) } -> std::same_as<T>;
+// concept TypeSupportedByEasySerDes = std::same_as<T, std::remove_cvref_t<T>> && requires (DataReader&& reader, DataWriter&& writer, const T& t) {
+//     { Serialiser<T>::Serialise(writer, t) } -> std::same_as<void>;
+//     { Serialiser<T>::Deserialise(reader) } -> std::same_as<T>;
 // };
 
 ///
@@ -88,7 +89,9 @@ bool Validate(Context& context, const nlohmann::json& serialised)
 template <typename T> requires TypeSupportedByEasySerDes<T>
 nlohmann::json Serialise(Context& context, const T& value)
 {
-    return Serialiser<T>::Serialise(context, value);
+    nlohmann::json data;
+    Serialiser<T>::Serialise(DataWriter::Create(context, "Serialise " + detail::TypeNameStr<T>(), data), value);
+    return data;
 }
 
 /**

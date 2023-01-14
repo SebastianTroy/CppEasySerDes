@@ -56,28 +56,28 @@ TEST_CASE("BuiltInTypes", "[json]")
 
     SECTION("char")
     {
-        RunTest<char>('a', json::value_t::string);
-        RunTest<char>('9', json::value_t::string);
-        RunTest<char>('#', json::value_t::string);
-        RunTest<char>('\n', json::value_t::string);
-        RunTest<char>('\0', json::value_t::string);
-        RunTest<char>(std::numeric_limits<char>::min(), json::value_t::string);
-        RunTest<char>(std::numeric_limits<char>::max(), json::value_t::string);
-        RunTest<char>(std::numeric_limits<char>::lowest(), json::value_t::string);
+        RunTest<char>('a', json::value_t::number_integer);
+        RunTest<char>('9', json::value_t::number_integer);
+        RunTest<char>('#', json::value_t::number_integer);
+        RunTest<char>('\n', json::value_t::number_integer);
+        RunTest<char>('\0', json::value_t::number_integer);
+        RunTest<char>(std::numeric_limits<char>::min(), json::value_t::number_integer);
+        RunTest<char>(std::numeric_limits<char>::max(), json::value_t::number_integer);
+        RunTest<char>(std::numeric_limits<char>::lowest(), json::value_t::number_integer);
 
-        RunFailureTest<char>(44, static_cast<int>(std::numeric_limits<char>::min()) - 1, static_cast<int>(std::numeric_limits<char>::max()) + 1);
+        RunFailureTest<char>(static_cast<int>(std::numeric_limits<char>::min()) - 1, static_cast<int>(std::numeric_limits<char>::max()) + 1);
     }
 
     SECTION("unsigned char")
     {
-        RunTest<unsigned char>('a');
-        RunTest<unsigned char>('9');
-        RunTest<unsigned char>('#');
-        RunTest<unsigned char>('\n');
-        RunTest<unsigned char>('\0');
-        RunTest<unsigned char>(std::numeric_limits<unsigned char>::min());
-        RunTest<unsigned char>(std::numeric_limits<unsigned char>::max());
-        RunTest<unsigned char>(std::numeric_limits<unsigned char>::lowest());
+        RunTest<unsigned char>('a', json::value_t::number_unsigned);
+        RunTest<unsigned char>('9', json::value_t::number_unsigned);
+        RunTest<unsigned char>('#', json::value_t::number_unsigned);
+        RunTest<unsigned char>('\n', json::value_t::number_unsigned);
+        RunTest<unsigned char>('\0', json::value_t::number_unsigned);
+        RunTest<unsigned char>(std::numeric_limits<unsigned char>::min(), json::value_t::number_unsigned);
+        RunTest<unsigned char>(std::numeric_limits<unsigned char>::max(), json::value_t::number_unsigned);
+        RunTest<unsigned char>(std::numeric_limits<unsigned char>::lowest(), json::value_t::number_unsigned);
 
         RunFailureTest<unsigned char>(-'c', static_cast<unsigned int>(std::numeric_limits<unsigned char>::min()) - 1, static_cast<unsigned int>(std::numeric_limits<unsigned char>::max()) + 1);
     }

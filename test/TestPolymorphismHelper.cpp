@@ -164,7 +164,7 @@ TEST_CASE("Polymorphic types treated polymorphically", "[json]")
         json deserialisedReserialised = esd::Serialise(deserialised);
 
         REQUIRE(original.size() == deserialised.size());
-        for (size_t i = 0; i < original.size(); ++i) {
+        for (std::size_t i = 0; i < original.size(); ++i) {
             auto& originalPtr = original[i];
             auto& deserialisedPtr = deserialised[i];
 
@@ -217,7 +217,7 @@ TEST_CASE("Polymorphic types treated polymorphically", "[json]")
         json deserialisedReserialised = esd::Serialise(deserialised);
 
         REQUIRE(original.size() == deserialised.size());
-        for (size_t i = 0; i < original.size(); ++i) {
+        for (std::size_t i = 0; i < original.size(); ++i) {
             auto& originalPtr = original[i];
             auto& deserialisedPtr = deserialised[i];
 

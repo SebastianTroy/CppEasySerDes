@@ -39,3 +39,33 @@ TEST_CASE("Test Serialiser<T that SupportsNlohmannJsonSerialisation>")
     REQUIRE(t.a_ == deserialised.a_);
     REQUIRE(t.b_ == deserialised.b_);
 }
+
+TEST_CASE("Test directly serialising nlohmann::json")
+{
+    nlohmann::json original = nlohmann::json::parse(
+R"JSON({"menu": {
+  "id": 5643787,
+  "value": "File",
+  "popup": {
+    "menuitem": [
+      {"value": "New", "onclick": "CreateDoc()"},
+      {"value": "Open", "onclick": "OpenDoc()"},
+      {"value": "Save", "onclick": "SaveDoc()"}
+    ]
+  }
+}})JSON");
+
+    auto serialised = esd::Serialise(original);
+
+    REQUIRE(original == serialised);
+
+    auto deserialised = esd::DeserialiseWithoutChecks<nlohmann::json>(serialised);
+
+    REQUIRE(original == deserialised);
+    REQUIRE(serialised == deserialised);
+
+    auto reserialised = esd::Serialise(deserialised);
+
+    REQUIRE(original == reserialised);
+    REQUIRE(serialised == reserialised);
+}

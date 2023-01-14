@@ -77,7 +77,7 @@ nlohmann::json already has its own support for custom types... why re-invent the
 
 To include this in your own CMAKE project as a statically linked library
 Create a file named "CppEasySerDes.cmake"in your project directory, containing the follwoing
-````CMAKE
+```CMAKE
 FetchContent_Declare(
     CppEasySerDes
     GIT_REPOSITORY  https://github.com/SebastianTroy/CppEasySerDes
@@ -92,9 +92,9 @@ FetchContent_MakeAvailable(CppEasySerDes)
 include_directories(
     "${CppEasySerDes_SOURCE_DIR}"
 )
-````
+```
 Then in your project CMakeLists.txt add
-````CMAKE
+```CMAKE
 include(FetchContent)
 include(CppEasySerDes)
 
@@ -102,7 +102,7 @@ target_link_libraries(<InsertYourProjectNameHere>
     PRIVATE
     CppEasySerDes
 )
-````
+```
 
 [Back to Index](#Table-of-Contents)
 
@@ -122,18 +122,18 @@ All numerical types are supported, even those larger than supported natively by 
 
 To support classes and structs, simply define an `esd::Serialiser` template overload (See [esd::ClassHelper](#esdClassHelper) for details):
 
-````C++
+```C++
 class esd::Serialiser<MyType> : esd::ClassHelper<MyType, ConstructionArgs...> {
     void Configure()
     {
         ...
     }
 };
-````
+```
 
 It is also possible to create custom overloads for non-class types (technically you can support classes and structs this way too):
 
-````C++
+```C++
 class esd::Serialiser<T> {
     bool Validate(Context& context, const nlohmann::json& serialised)
     {
@@ -150,7 +150,7 @@ class esd::Serialiser<T> {
         ...
     }
 };
-````
+```
 
 ### Standard Library
 --------------------
@@ -192,25 +192,25 @@ For the following example to work:
 
 See the section on [Supporting Polymorphic Types](#Supporting-Polymorphic-Types) for more details.
 
-````C++
+```C++
 std::unique_ptr<ParentType> basePtr = std::make_unique<DerivedType>(args...);
 
 auto serialised = esd::Serialise(basePtr);
 
 // Even though we're using the `ParentType` Deserialise function, our deserialisedPtr will point to an instance of `DerivedType`
 std::unique_ptr<ParentType> deserialisedPtr = esd::DeserialiseWithoutChecks<std::unique_ptr<ParentType>>(serialised);
-````
+```
 
 `shared_ptr` tracking
 ---------------------
 
 `shared_ptr` is a special case, during a call to `esd::Deserialise` it will check the serialised type to see if an existing shared_ptr has already been created by the library during the current call to `esd::Deserialise(...)`.
 
-````C++
+```C++
 std::shared_ptr<T> originalInstance = std::make_shared<T>(args...);
 
 std::vector<decltype(instance)> instances;
-for (size_t i = 0; i < 100; ++i) {
+for (std::size_t i = 0; i < 100; ++i) {
     instances.push_back(originalInstance);
     assert(instances[i].get() == originalInstance.get()); // true, they're pointers to the same address
 }
@@ -219,17 +219,17 @@ auto serialised = esd::Serialise(vectorOfInstances);
 
 std::vector<decltype(instance)> deserialisedInstances = esd::DeserialiseWithoutChecks<std::vector<decltype(instance)>>(serialised);
 
-for (size_t i = 0; i < 100; ++i) {
+for (std::size_t i = 0; i < 100; ++i) {
     // All deserialised pointers are to the same instance
     assert(deserialisedInstances[0].get() == deserialisedInstances[i].get()); // true, they're pointers to the same address
     
     // BUT they don't point to the same instance as originalInstance
     assert(deserialisedInstances[i] == originalInstance.get()); // FALSE! During deserialisation an instance of `T` has been created on the heap!
 }
-````
+```
 
 The following pointers will not be to the same shared instance, despite being deserialised from the same source, because they are created over multiple calls to `esd::Deserialise`.
-````C++
+```C++
 std::shared_ptr<T> originalInstance = std::make_shared<T>(args...);
 nlohmann::json serialised = esd::Serialise(originalInstance);
 
@@ -238,12 +238,12 @@ std::shared_ptr<T> deserialisedInstance = esd::DeserialiseWithoutChecks<std::sha
 
 // This DOES NOT to the same instance as deserialisedSharedInstance
 std::shared_ptr<T> anotherDeserialisedInstance = esd::DeserialiseWithoutChecks<std::shared_ptr<T>>(serialised);
-````
+```
 
 
 This can be overcome if necessary by using an `esd::ContextStateLifetime`. As long as any `esd::ContextStateLifetime` instance exists anywhere, the internal caches will be preserved. This means that if multiple are created, the caches to be only cleared when the final one is destroyed.
 
-````C++
+```C++
 std::shared_ptr<T> originalInstance = std::make_shared<T>(args...);
 nlohmann::json serialised = esd::Serialise(originalInstance);
 
@@ -258,7 +258,7 @@ nlohmann::json serialised = esd::Serialise(originalInstance);
 // `scopedLifetime` has gone out of scope, so now this pointer is to a new instance
 std::shared_ptr<T> lastDeserialisedInstance = esd::DeserialiseWithoutChecks<std::shared_ptr<T>>(serialised);
 
-````
+```
 
 ## Examples
 -----------
@@ -267,16 +267,16 @@ std::shared_ptr<T> lastDeserialisedInstance = esd::DeserialiseWithoutChecks<std:
 ---------------------
 
 A theoretical save game system may look like the following:
-````C++
+```C++
 void SaveGame(const GameState& state)
 {
     std::ofstream file;
     file.open("save-game.txt");
     file << std::setw(4) << esd::Serialise(state);
 }
-````
+```
 To load the game state you have two options, the following uses std::optional and offloads the logic required to check if it was succesful to the caller.
-````C++
+```C++
 std::optional<GameState> LoadGame()
 {
     std::ifstream file("save-game.txt");
@@ -284,9 +284,9 @@ std::optional<GameState> LoadGame()
     file >> serialisedGameState;
     return esd::Deserialise<GameState>(serialisedGameState);
 }
-````
+```
 The other option is to do the checks ourselves
-````C++
+```C++
 void LoadGame()
 {
     std::ifstream file("save-game.txt");
@@ -298,13 +298,13 @@ void LoadGame()
         std::cout << "Failed to load save from save-game.txt" << std::endl;
     }
 }
-````
+```
 
 ### Supporting A Trivial Type
 -----------------------------
 
 This is intended to be the most common use case. The following example demonstrates how you would use the esd::ClassHelper to support a struct, and optionally assign a label and/or additional validation to each struct member variable.
-````C++
+```C++
 struct TrivialType {
     int a_;
     std::vector<int> b_;
@@ -321,7 +321,7 @@ struct esd::Serialiser<TrivialType> : public esd::ClassHelper<TrivialType, int, 
                         CreateParameter(&TrivialType::c_, std::nullopt, [](const std::string&) -> bool { /* custom validation */ }));
     }
 };
-````
+```
 
 [Back to Index](#Table-of-Contents)
 
@@ -329,7 +329,7 @@ struct esd::Serialiser<TrivialType> : public esd::ClassHelper<TrivialType, int, 
 -----------------------------
 
 A contrived example to show off more features. 
-````C++
+```C++
 // Class definitions not included for brevity
 class ContrivedType {
 public:
@@ -388,7 +388,7 @@ public:
         DefinePostDeserialiseAction([](const nlohmann::json& input, ContrivedType& output){ /* ... */ });
     }
 };
-````
+```
 
 [Back to Index](#Table-of-Contents)
 
@@ -396,7 +396,7 @@ public:
 -------------------------------
 
 This is identical to supporting a trivial or complex type, except function-name lookup can be problematic. To combat this you can use:
-````C++
+```C++
 template <typename T>
 struct TemplatedType {
     T value_;
@@ -414,7 +414,7 @@ struct esd::Serialiser<TemplatedType<T>> : public esd::ClassHelper<TemplatedType
         This::SetConstruction(This::CreateParameter(&TemplatedType::value_));
     }
 };
-````
+```
 
 [Back to Index](#Table-of-Contents)
 
@@ -425,46 +425,46 @@ And finally some examples showing how to support polymorphism. The class and `es
 
 The polymorphic types to support:
 
-````C++
+```C++
 class ParentType;
-````
-````C++
+```
+```C++
 class ChildTypeA : public ParentType;
-````
-````C++
+```
+```C++
 class ChildTypeB : public ParentType;
-````
-````C++
+```
+```C++
 class GrandChildType : public ChildTypeA;
-````
+```
 
 Each type needs to have a `Serialiser` specialisation. This step is identical to supporting non-polymorphic types.
 
 If a specialisation already exists (e.g. your type has nlohmann::json's own `to_json` and `from_json` support, or satisfies `std::ranges::range<T>`) then you don't need to define your own specialisation.
 
-````C++
+```C++
 template <>
 class esd::Serialiser<ParentType> : public esd::ClassHelper<ParentType, int>;
-````
-````C++
+```
+```C++
 template <>
 class esd::Serialiser<ChildTypeA> : public esd::ClassHelper<ChildTypeA, bool>;
-````
-````C++
+```
+```C++
 template <>
 class esd::Serialiser<ChildTypeB>; // Extending ClassHelper is completely optional (though advised!)
-````
-````C++
+```
+```C++
 template <>
 class esd::Serialiser<GrandChildType> : public esd::ClassHelper<GrandChildType, int>;
-````
+```
 
 To support the polymorphic aspect we can just add the following definition. 
 Note that ParentType is listed twice in `PolymorphicSet<...>`. The first type in the list must match the type in `PolymorphismHelper<T>` and the following types are all of the types a ParentType* could be pointing to.
 
-````C++
+```C++
 class PolymorphismHelper<ParentType> : public PolymorphicSet<ParentType, ParentType, ChildTypeA, ChildTypeB, GrandChildType>{}
-````
+```
 
 Now any `shared_ptr<ParentType>` or `unique_ptr<ParentType>` will correctly serialise to any of the derived types (in this case `ParentType`, `ChildTypeA`, `ChildTypeB`, or `GrandChildType`).
 
@@ -482,16 +482,16 @@ These are the functions called when using the library, and are in the "esd" name
 --------------
 
 Will return true only if the specified JSON structure can succesfully be deserialised into type T by calling esd::Deserialise<T>(serialised)
-````C++
+```C++
 template <typename T> requires TypeSupportedByEasySerDes<T>
 bool Validate(const nlohmann::json& serialised);
-````
+```
 
 Same as above, except it accepts a context reference, allowing the user to extend the lifetime of a context beyond a single call to the API.
-````C++
+```C++
 template <typename T> requires TypeSupportedByEasySerDes<T>
 bool Validate(Context& context, const nlohmann::json& serialised);
-````
+```
 
 [Back to Index](#Table-of-Contents)
 
@@ -499,16 +499,16 @@ bool Validate(Context& context, const nlohmann::json& serialised);
 ---------------
 
 Will return a JSON structure that can succesfully be deserialised into type T by calling `esd::DeserialiseWithoutChecks<T>`, and a call to `esd::Validate<T>(esd::Serialise<T>(...))` will return true.
-````C++
+```C++
 template <typename T> requires TypeSupportedByEasySerDes<T>
 nlohmann::json Serialise(const T& value);
-````
+```
 
 Same as above, except it accepts a context reference, allowing the user to extend the lifetime of a context beyond a single call to the API.
-````C++
+```C++
 template <typename T> requires TypeSupportedByEasySerDes<T>
 nlohmann::json Serialise(Context& contxt, const T& value);
-````
+```
 
 [Back to Index](#Table-of-Contents)
 
@@ -516,16 +516,16 @@ nlohmann::json Serialise(Context& contxt, const T& value);
 -----------------
 
  If `esd::Validate<T>(serialised)` returns true, the returned optional will contain a valid instance of type T, else it will be equal to `std::nullopt`.
-````C++
+```C++
 template <typename T> requires TypeSupportedByEasySerDes<T>
 std::optional<T> Deserialise(const nlohmann::json& serialised);
-````
+```
 
 Same as above, except it accepts a context reference, allowing the user to extend the lifetime of a context beyond a single call to the API.
-````C++
+```C++
 template <typename T> requires TypeSupportedByEasySerDes<T>
 std::optional<T> Deserialise(Context& context, const nlohmann::json& serialised);
-````
+```
 
 [Back to Index](#Table-of-Contents)
 
@@ -534,16 +534,16 @@ std::optional<T> Deserialise(Context& context, const nlohmann::json& serialised)
 
 `Validate<T>(serialised)` is not called, and should be first called by the user. If the json cannot be succesfully converted into an instance of type T the program will halt.
 This may be useful for cases where type `T` cannot copied or moved out of a `std::optional<T>`.
-````C++
+```C++
 template <typename T> requires TypeSupportedByEasySerDes<T>
 T DeserialiseWithoutChecks(const nlohmann::json& serialised);
-````
+```
 
 Same as above, except it accepts a context reference, allowing the user to extend the lifetime of a context beyond a single call to the API.
-````C++
+```C++
 template <typename T> requires TypeSupportedByEasySerDes<T>
 T DeserialiseWithoutChecks(const nlohmann::json& serialised);
-````
+```
 
 [Back to Index](#Table-of-Contents)
 
@@ -558,7 +558,7 @@ T DeserialiseWithoutChecks(const nlohmann::json& serialised);
 For any of your types to be supported by this library, you must create a specialisation of the following templated type.
 Every esd::Serialiser must implement a static Validate, Serialise and Deserialise function.
 It is **NOT RECOMMENDED** that you support your types directly like this, see `esd::ClassHelper`.
-````C++
+```C++
 template <>
 class esd::Serialiser<T> {
 public:
@@ -566,7 +566,7 @@ public:
     static nlohmann::json Serialise(Context& context, const T& value);
     static T Deserialise(Context& context, const nlohmann::json& serialised);
 };
-````
+```
 
 [Back to Index](#Table-of-Contents)
 
@@ -575,13 +575,13 @@ public:
 
 To make use of the `ClassHelper` you publically extend it when you are implementing an esd::Serialiser.
 It already defines the Validate, Serialise and Deserialise functions for you, so all that remains is to define a static Configure function as below.
-````C++
+```C++
 template <>
 class esd::Serialiser<T> : public esd::ClassHelper<T, ConstructionParameterTypes...> {
 public:
     static void Configure();
 };
-````
+```
 #### esd::ClassHelper::SetConstruction
 --------------------------------------
 
@@ -590,37 +590,37 @@ This **MUST** be called if your type is not default constructable, or if your ty
 `SetConstruction` takes a series of `Parameter`s which are created by the helper.
 The actual type of `Parameter` is private in this context, so a Parameter has to be created in place within the call to `SetConstruction`.
 
-````C++
+```C++
 static void Configure()
 {
     SetConstruction(CreateParameter(...), ...);
 }
-````
+```
 `CreateParameter` is a template, and while the type will be **automatically deduced**, it is important that the deduced types match the target types construction signature, ignoring constness, references and r values e.t.c.
 If the constructor takes int and const string reference
-````C++
+```C++
 T(int a, const std::string& b);
-````
+```
 The the parameters must be equivalent to the follwoing
-````C++
+```C++
 SetConstruction(CreateParameter<int>(...), CreateParameter<std::string>(...));
-````
+```
 While each parameter may have its own individual validation, in some cases it may be desirable to check the validity of the parameters relative to each other,
 this can be important to prevent program crashes when constructing a type with invalid arguments that individually evaluated as valid values.
 Note that the validation function must be callable with the same parameters as the constructor of the target type.
 Again whether the types are const, references or r-values is irrelevent, and they *can* be different to the construction signature.
-````C++
+```C++
 bool ValidateFunc(int i, const std::string& s)
 {
     return i < s.size();
 }
-````
-````C++
+```
+```C++
 // Defer to an existing function
 SetConstruction(&ValidateFunc, CreateParameter<int>(...), CreateParameter<std::string>(...));
 // OR use a lambda
 SetConstruction([](int i, const std::string& s){ return i < s.size(); }, CreateParameter<int>(...), CreateParameter<std::string>(...));
-````
+```
 
 [Back to Index](#Table-of-Contents)
 
@@ -632,39 +632,39 @@ As many initialise calls can be registered as necessary.
 `AddInitialisationCall` takes a member function pointer, to a public member function of the target type, and a series of `Parameter`s which are created by the helper.
 The actual type of `Parameter` is private in this context, so a Parameter has to be created in place within the call to `AddInitialisationCall`.
 
-````C++
+```C++
 class T {
 public:
     Initialise(bool b, const std::string& s);
 };
-````
-````C++
+```
+```C++
 static void Configure()
 {
     AddInitialisationCall(&T::Initialise, CreateParameter(...), CreateParameter(...));
 }
-````
+```
 `CreateParameter` is a template, and while the type will be **automatically deduced**, it is important that the deduced types match the provided initialise function's signature, ignoring constness, references and r values e.t.c.
 In the above examplethe parameters must be equivalent to the follwoing
-````C++
+```C++
 AddInitialisationCall(CreateParameter<bool>(...), CreateParameter<std::string>(...));
-````
+```
 While each parameter may have its own individual validation, in some cases it may be desirable to check the validity of the parameters relative to each other,
 this can be important to prevent program crashes due to invalid parameters that individually evaluated as valid values.
 Note that the validation function must be callable with the same parameters as the initialise function.
 Again whether the types are const, references or r-values is irrelevent, and they *can* be different to the construction signature.
-````C++
+```C++
 bool ValidateFunc(bool b, const std::string& s)
 {
     return b == s.empty();
 }
-````
-````C++
+```
+```C++
 // Defer to an existing function
 AddInitialisationCall(&ValidateFunc, CreateParameter<bool>(...), CreateParameter<std::string>(...));
 // OR use a lambda
 AddInitialisationCall([](bool b, const std::string& s){ return b == s.empty(); }, CreateParameter<bool>(...), CreateParameter<std::string>(...));
-````
+```
 
 [Back to Index](#Table-of-Contents)
 
@@ -684,9 +684,9 @@ The `getter` parameter of the first overload can be:
 
 Note they can all be invoked with a single `const T&` parameter, to return a value of `ParamType`.
 This is the most likely use case, as you are using information from an instance of type `T` to save and load instances of type `T`
-````C++
+```C++
 CreateParameter(function<ParamType(const T&)> getter, optional<string> label, optional<function<bool(const ParamType&)>> validator);
-````
+```
 
 -----
 
@@ -699,9 +699,9 @@ The `getter` parameter of the second overload can be:
 Note they can all be invoked with no parameters, to return a value of `ParamType`.
 This overload is to be used in cases where a type `T` is constructed from values that are not obtainable from the class itself. Perhaps values that are obtainable from a config file e.t.c. This overload should not be required often.
 
-````C++
+```C++
 CreateParameter(function<ParamType()> getter, optional<string> label, optional<function<bool(const ParamType&)>> validator);
-````
+```
 
 -----
 
@@ -715,9 +715,9 @@ The `value` parameter of the third overload must be a value that can be copied:
 
 This overload should not be required often.
 
-````C++
+```C++
 CreateParameter(const ParamType& value, optional<string> label);
-````
+```
 
 -----
 
@@ -732,12 +732,12 @@ The `validator` allows you to add custom validation to the value, e.g. you could
 You can specify nothing, `{}` or `std::nullopt` and no additional validation will occur, however the base validation always occurs (i.e. that the stored value can be converted to the correct type).
 
 Some usage examples:
-````C++
+```C++
 CreateParam(42);
 CreateParam(&T::min, "min");
 CreateParam(&T::GetEmail, std::nullopt, [emailRegex](std::string&& email) -> bool { std::regex_match(email, emailRegex); });
 CreateParam([](const T& instance) -> std::pair<int, int> { return std::make_pair(instance.Min(), instance.Max()); }, "min-max");
-````
+```
 
 [Back to Index](#Table-of-Contents)
 
@@ -754,9 +754,9 @@ The `getterAndSetter` parameter of the first overload can be:
 | ----------------------------------- | --------------------------|
 | A public object member pointer      | `&T::memberVariableName_` |
 
-````C++
+```C++
 RegisterVariable(MemberObjectPointer* getterAndSetter, optional<string> label, optional<bool(const ParamType&)> validator)
-````
+```
 
 The `getter` parameter of the second overload can be:
 |                  Name                   |                   Example                   |
@@ -768,9 +768,9 @@ The `getter` parameter of the second overload can be:
 
 Note they can all be invoked with a single `const T&` parameter, to return a value of `ParamType`. Consider using the first overload if you have access to a member object pointer.
 
-````C++
+```C++
 RegisterVariable(function<ParamType(const T&)> getter, function<void(T&, const ParamType&)> setter, optional<string> label, optional<bool(const ParamType&)> validator)
-````
+```
 
 The `getter` parameter of the third overload can be:
 |                  Name                   |               Example               |
@@ -780,9 +780,9 @@ The `getter` parameter of the third overload can be:
 
 Note they can all be invoked with no parameters, to return a value of `ParamType`.
 
-````C++
+```C++
 RegisterVariable(function<ParamType()> getter, function<void(T&, const ParamType&)> setter, optional<string> label, optional<bool(const ParamType&)> validator)
-````
+```
 
 The `setter` parameter is the same in both the second and third overloads, and can be:
 |                   Name                  |                             Example                             |
@@ -804,7 +804,7 @@ The `validator` allows you to add custom validation to the value, e.g. you could
 You can specify nothing, `{}` or `std::nullopt` and no additional validation will occur, however the base validation always occurs (i.e. that the stored value can be converted to the correct type).
 
 Some usage examples:
-````C++
+```C++
 RegisterVariable(&T::count, "Count");
 RegisterVariable(&T::GetEmail, &T::SetEmail, std::nullopt, [emailRegex](std::string&& email) -> bool { std::regex_match(email, emailRegex); });
 
@@ -821,7 +821,7 @@ auto validdator = [](const std::pair<int, int>& minMax) -> bool
                      return minMax.first <= minMax.second;
                   };
 RegisterVariable(std::move(getter), std::move(setter), "min-max", std::move(validator));
-````
+```
 
 [Back to Index](#Table-of-Contents)
 
@@ -834,9 +834,9 @@ This function provides complete access to the generated output just before it is
 
 You can also ignore the input parameters and simply use the function to perform some global book-keeping e.c.t.
 
-````C++
+```C++
 void DefinePostSerialiseAction(std::function<void (const T&, nlohmann::json&)>&& action);
-````
+```
 
 [Back to Index](#Table-of-Contents)
 
@@ -849,9 +849,9 @@ This function provides complete access to an instance of `T` just after it is ha
 
 You can also ignore the input parameters and simply use the function to perform some global book-keeping e.c.t.
 
-````C++
+```C++
 void DefinePostDeserialiseAction(std::function<void (const nlohmann::json&, T&)>&& action);
-````
+```
 
 [Back to Index](#Table-of-Contents)
 
@@ -864,36 +864,36 @@ In all cases, it is important that the instance of `T` created by the factory is
 
 The **first overload** is for cases where the `factory` returns an instance directly, or the result can be de-referenced, e.g. an iterator, or smart pointer.
 
-````C++
+```C++
 auto DeserialiseInPlace(Invocable factory, const nlohmann::json& toDeserialise)
-````
+```
 
 The **second overload** is for when the `factory` doesn't return an instance, or something that can be dereferenced into an instance. Instead the user must also provide a `accessResultFromFactoryOutput` parameter, which is a function that takes the output of the `factory` and returns the instance of `T` that was just created.
 
 Note that `factory` may not return anything, or something that has no way to return an instance of `T`, in this case you'll need to use lambda capture.
 
-````C++
+```C++
 auto DeserialiseInPlace(Invocable factory, const std::function<T* (FactoryReturnType&)>& accessResultFromFactoryOutput, const nlohmann::json& toDeserialise)
-````
+```
 
 Now in cases where we know the type in question, and the construction args we could call the following to create a `shared_ptr<T>`
-````C++
+```C++
 struct T { int i; double d; };
 nlohmann::json serialised = ...;
 Serialiser<T>::DeserialiseInPlace(std::make_shared<T, int, double>, serialised);
-````
+```
 
 There is however a small problem, we cannot pass `std::make_shared` as a templateparameter, or an argument... `&std::make_shared<T>` could be passed because it is a fully formed function pointer, but note that in this case we are limiting ourselves to default constructable types. `std::make_shared<T>(32)` is actually deduced as `std::make_shared<T, int>(32)` by the compiler! Instead we need to let the compiler deduce the types for us using a templated lambda:
-````C++
+```C++
 template <typename T>
 nlohmann::json serialised = ...;
 Serialiser<T>::DeserialiseInPlace([](auto... args){ return factory<T>(args...); }, serialised);
-````
+```
 
 An example of this can be seen in the `std::shared_ptr` and `std::unique_ptr` specialisations, where `std::make_shared` and `std::make_unique` are used respectively.
 
 The following code has been cut down for this demonstration.
-````C++
+```C++
 template <typename T>
 class esd::Serialiser<std::shared_ptr<T>> {
 public:
@@ -903,7 +903,7 @@ public:
             return esd::Serialiser<T>::DeserialiseInPlace([](auto... args){ return std::make_shared<T>(args...); }, serialised.at(wrappedTypeKey));
         }
     }
-````
+```
 
 [Back to Index](#Table-of-Contents)
 
@@ -916,7 +916,7 @@ To allow the library to treat polymorphic types correctly, you must define a `Po
 
 Each `esd::PolymorphismHelper<T>` extends `esd::PolymorphicSet<BaseType, DerivedTypes>`, where `T` must always be the same type as `BaseType` and `DerivedTypes` must all be derived from `BaseType`.
 
-````C++
+```C++
 // Add polymorphic support for BaseType smart pointers
 class esd::PolymorphismHelper<BaseType> : public esd::PolymorphicSet<BaseType, BaseType, ChildType, AnotherChildType, GrandChild, GreatGrandChildType>{};
 
@@ -928,14 +928,14 @@ struct Foo {
     // FIX: `class esd::PolymorphismHelper<GrandChild> : public esd::PolymorphicSet<GrandChild, GrandChild, GreatGrandChildType>{};`
     std::vector<std::shared_ptr<GrandChild>> notPolymorphic;
 };
-````
+```
 
 It is worth noting that `T` counts as being derived from `T`, so it must be repeated in the `DerivedTypes` list if you intend to support instances of the base type too.
 
-````C++
+```C++
 class PolymorphismHelper<PureVirtualBaseType> : public PolymorphicSet<PureVirtualBaseType, DerivedTypes...>{};
 class PolymorphismHelper<ConstructableBaseType> : public PolymorphicSet<ConstructableBaseType, ConstructableBaseType, DerivedTypes...>{};
-````
+```
 
 
 [Back to Index](#Table-of-Contents)

@@ -24,17 +24,19 @@ class Serialiser<std::byte> {
 public:
     static bool Validate(Context& context, const nlohmann::json& serialised)
     {
-        return serialised.is_string() && serialised.get<std::string>().size() == 4 && serialised.get<std::string>().starts_with("0x");
+        return serialised.is_string() && serialised.get<std::string>().size() == 2;
     }
 
-    static nlohmann::json Serialise(Context& context, const std::byte& value)
+    static void Serialise(DataWriter&& writer, const std::byte& value)
     {
         // TODO when std::format available, this will be a lot cleaner
         std::ostringstream byteStringStream;
         // Stream uint32 because it won't be converted to a char
         uint32_t valueAsWord = std::bit_cast<uint8_t>(value);
-        byteStringStream << "0x" << std::hex << std::setfill('0') << std::fixed << std::setw(2) << valueAsWord;
-        return byteStringStream.str();
+        byteStringStream << std::hex << std::setfill('0') << std::fixed << std::setw(2) << valueAsWord;
+
+        writer.SetFormatToValue();
+        writer.Write(byteStringStream.str());
     }
 
     static std::byte Deserialise(Context& context, const nlohmann::json& serialised)
@@ -87,9 +89,10 @@ public:
         return serialised.is_string();
     }
 
-    static nlohmann::json Serialise(Context& context, const std::string& string)
+    static void Serialise(DataWriter&& writer, const std::string& string)
     {
-        return string;
+        writer.SetFormatToValue();
+        writer.Write(string);
     }
 
     static std::string Deserialise(Context& context, const nlohmann::json& serialised)
@@ -116,11 +119,12 @@ public:
         return serialised.is_string();
     }
 
-    static nlohmann::json Serialise(Context& context, const T& stringLikeValue)
+    static void Serialise(DataWriter&& writer, const T& stringLikeValue)
     {
         std::string serialised;
         std::ranges::copy(stringLikeValue, std::back_inserter(serialised));
-        return serialised;
+        writer.SetFormatToValue();
+        writer.Write(serialised);
     }
 
     static T Deserialise(Context& context, const nlohmann::json& serialised)
@@ -139,11 +143,10 @@ public:
         return serialised.is_array() && std::ranges::all_of(serialised, [&](const nlohmann::json& value){ return Serialiser<typename T::value_type>::Validate(context, value); } );
     }
 
-    static nlohmann::json Serialise(Context& context, const T& range)
+    static void Serialise(DataWriter&& writer, const T& range)
     {
-        nlohmann::json serialisedItems = nlohmann::json::array();
-        std::ranges::transform(range, std::back_inserter(serialisedItems), [&](const auto& value){ return Serialiser<typename T::value_type>::Serialise(context, value); });
-        return serialisedItems;
+        writer.SetFormatToArray(range.size());
+        std::ranges::for_each(range, [&](const auto& value){ writer.PushBack(value); });
     }
 
     static T Deserialise(Context& context, const nlohmann::json& serialised)
@@ -154,7 +157,7 @@ public:
     }
 };
 
-template <size_t N>
+template <std::size_t N>
 class Serialiser<std::bitset<N>> {
 public:
     static bool Validate(Context& context, const nlohmann::json& serialised)
@@ -172,9 +175,10 @@ public:
         return valid;
     }
 
-    static nlohmann::json Serialise(Context& context, const std::bitset<N>& range)
+    static void Serialise(DataWriter&& writer, const std::bitset<N>& range)
     {
-        return range.to_string();
+        writer.SetFormatToValue();
+        writer.Write(range.to_string());
     }
 
     static std::bitset<N> Deserialise(Context& context, const nlohmann::json& serialised)
@@ -183,7 +187,7 @@ public:
     }
 };
 
-template <typename T, size_t N>
+template <typename T, std::size_t N>
 class Serialiser<std::array<T, N>> {
 public:
     static bool Validate(Context& context, const nlohmann::json& serialised)
@@ -191,11 +195,10 @@ public:
         return serialised.is_array() && serialised.size() == N && std::ranges::all_of(serialised, [&](const auto& value){ return Serialiser<T>::Validate(context, value); });
     }
 
-    static nlohmann::json Serialise(Context& context, const std::array<T, N>& range)
+    static void Serialise(DataWriter&& writer, const std::array<T, N>& range)
     {
-        nlohmann::json serialisedItems = nlohmann::json::array();
-        std::ranges::transform(range, std::back_inserter(serialisedItems), [&](const auto& value){ return Serialiser<T>::Serialise(context, value); });
-        return serialisedItems;
+        writer.SetFormatToArray(N);
+        std::ranges::for_each(range, [&](const auto& value){ writer.PushBack(value); });
     }
 
     static std::array<T, N> Deserialise(Context& context, const nlohmann::json& serialised)
@@ -204,7 +207,7 @@ public:
     }
 
 private:
-    template <size_t... I>
+    template <std::size_t... I>
     static std::array<T, N> CreateArray(Context& context, const nlohmann::json& serialised, std::index_sequence<I...>)
     {
         return std::array<T, N>{ Serialiser<T>::Deserialise(context, serialised.at(I)) ... };
@@ -219,15 +222,15 @@ public:
         return (serialised == nullString) || Serialiser<T>::Validate(context, serialised);
     }
 
-    static nlohmann::json Serialise(Context& context, const std::optional<T>& toSerialise)
+    static void Serialise(DataWriter&& writer, const std::optional<T>& toSerialise)
     {
-        nlohmann::json serialisedOptional = nullString;
+        writer.SetFormatToValue();
 
         if (toSerialise.has_value()) {
-            serialisedOptional = Serialiser<T>::Serialise(context, toSerialise.value());
+            writer.Write(toSerialise.value());
+        } else {
+            writer.Write(nullString);
         }
-
-        return serialisedOptional;
     }
 
     static std::optional<T> Deserialise(Context& context, const nlohmann::json& serialised)
@@ -266,22 +269,20 @@ public:
         return valid;
     }
 
-    static nlohmann::json Serialise(Context& context, const std::variant<Ts...>& toSerialise)
+    static void Serialise(DataWriter&& writer, const std::variant<Ts...>& toSerialise)
     {
-        nlohmann::json serialisedVariant;
+        writer.SetFormatToObject();
 
         // The following immediately called lambda is called once for each type
         ([&]()
         {
             std::string key = detail::TypeNameStr<Ts>();
             if (std::holds_alternative<Ts>(toSerialise)) {
-                serialisedVariant[key] = Serialiser<Ts>::Serialise(context, std::get<Ts>(toSerialise));
+                writer.Insert(key, std::get<Ts>(toSerialise));
             } else {
-                serialisedVariant[key] = nullString;
+                writer.Insert(key, nullString);
             }
         }(), ...);
-
-        return serialisedVariant;
     }
 
     static std::variant<Ts...> Deserialise(Context& context, const nlohmann::json& serialised)
@@ -325,10 +326,16 @@ public:
         return valid;
     }
 
-    static nlohmann::json Serialise(Context& context, const std::unique_ptr<T>& toSerialise)
+    static void Serialise(DataWriter&& writer, const std::unique_ptr<T>& toSerialise)
     {
-        // Delegate to raw pointer function so that shared_ptr<T> can share the impl
-        return Serialise(context, toSerialise.get());
+        writer.SetFormatToValue();
+        if (toSerialise == nullptr) {
+            writer.Write(nullPointerString);
+        } else if constexpr (HasPolymorphismHelperSpecialisation<T>) {
+            PolymorphismHelper<T>::Write(writer, *toSerialise.get());
+        } else {
+            writer.Write(*toSerialise);
+        }
     }
 
     static std::unique_ptr<T> Deserialise(Context& context, const nlohmann::json& serialised)
@@ -360,22 +367,6 @@ public:
 
 private:
     static inline const std::string nullPointerString = "nullptr";
-
-    friend Serialiser<std::shared_ptr<T>>;
-    static nlohmann::json Serialise(Context& context, const T* const toSerialise)
-    {
-        nlohmann::json serialised;
-
-        if (toSerialise == nullptr) {
-            serialised = nullPointerString;
-        } else if constexpr (HasPolymorphismHelperSpecialisation<T>) {
-            serialised = PolymorphismHelper<T>::SerialisePolymorphic(context, *toSerialise);
-        } else {
-            serialised = Serialiser<T>::Serialise(context, *toSerialise);
-        }
-
-        return serialised;
-    }
 };
 
 /**
@@ -398,14 +389,19 @@ public:
         return valid;
     }
 
-    static nlohmann::json Serialise(Context& context, const std::shared_ptr<T>& toSerialise)
+    static void Serialise(DataWriter&& writer, const std::shared_ptr<T>& toSerialise)
     {
-        nlohmann::json serialisedPtr = nlohmann::json::object();
+        writer.SetFormatToObject();
         std::uintptr_t pointerValue = reinterpret_cast<std::uintptr_t>(toSerialise.get());
-        serialisedPtr[uniqueIdentifierKey] = pointerValue;
-        // Can't delegate to unique_ptr to avoid code duplication
-        serialisedPtr[wrappedTypeKey] = Serialiser<std::unique_ptr<T>>::Serialise(context, toSerialise.get());
-        return serialisedPtr;
+        writer.Insert(uniqueIdentifierKey, pointerValue);
+
+        if (toSerialise == nullptr) {
+            writer.Insert(wrappedTypeKey, nullPointerString);
+        } else if constexpr (HasPolymorphismHelperSpecialisation<T>) {
+            PolymorphismHelper<T>::Insert(writer, wrappedTypeKey, *toSerialise.get());
+        } else {
+            writer.Insert(wrappedTypeKey, *toSerialise);
+        }
     }
 
     static std::shared_ptr<T> Deserialise(Context& context, const nlohmann::json& serialised)
@@ -428,8 +424,9 @@ private:
 
     using CacheType = std::map<std::uintptr_t, PointerInfo>;
 
-    static inline std::string uniqueIdentifierKey = "ptr";
-    static inline std::string cacheName = "shared_ptr";
+    static inline const std::string uniqueIdentifierKey = "ptr";
+    static inline const std::string cacheName = "shared_ptr";
+    static inline const std::string nullPointerString = "nullptr";
 
     static std::shared_ptr<T> CheckCache(Context& context, const nlohmann::json& serialised)
     {

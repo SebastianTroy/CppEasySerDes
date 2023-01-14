@@ -38,36 +38,15 @@ public:
         return serialised.is_boolean();
     }
 
-    static nlohmann::json Serialise(Context& context, const bool& value)
+    static void Serialise(DataWriter&& writer, const bool& value)
     {
-        return value;
+        writer.SetFormatToValue();
+        writer.Write(value);
     }
 
     static bool Deserialise(Context& context, const nlohmann::json& serialised)
     {
         return serialised.get<bool>();
-    }
-};
-
-/**
- * Specialise for char so that is is more user readable in JSON form
- */
-template <>
-class Serialiser<char> {
-public:
-    static bool Validate(Context& context, const nlohmann::json& serialised)
-    {
-        return serialised.is_string() && serialised.get<std::string>().size() == 1;
-    }
-
-    static nlohmann::json Serialise(Context& context, const char& value)
-    {
-        return std::string{ value };
-    }
-
-    static char Deserialise(Context& context, const nlohmann::json& serialised)
-    {
-        return serialised.get<std::string>()[0];
     }
 };
 
@@ -84,9 +63,10 @@ class Serialiser<T> {
         return MatchType(nlohmann::json::value_t::number_integer, serialised.type()) && serialised.get<InternalType>() == static_cast<InternalType>(Deserialise(context, serialised));
     }
 
-    static nlohmann::json Serialise(Context& context, const T& value)
+    static void Serialise(DataWriter&& writer, const T& value)
     {
-        return value;
+        writer.SetFormatToValue();
+        writer.Write(value);
     }
 
     static T Deserialise(Context& context, const nlohmann::json& serialised)
@@ -108,9 +88,10 @@ class Serialiser<T> {
         return MatchType(nlohmann::json::value_t::number_unsigned, serialised.type()) && serialised.get<InternalType>() == static_cast<InternalType>(Deserialise(context, serialised));
     }
 
-    static nlohmann::json Serialise(Context& context, const T& value)
+    static void Serialise(DataWriter&& writer, const T& value)
     {
-        return value;
+        writer.SetFormatToValue();
+        writer.Write(value);
     }
 
     static T Deserialise(Context& context, const nlohmann::json& serialised)
@@ -132,9 +113,10 @@ public:
         return MatchType(nlohmann::json::value_t::number_float, serialised.type()) && serialised.get<InternalType>() == static_cast<InternalType>(Deserialise(context, serialised));
     }
 
-    static nlohmann::json Serialise(Context& context, const T& value)
+    static void Serialise(DataWriter&& writer, const T& value)
     {
-        return value;
+        writer.SetFormatToValue();
+        writer.Write(value);
     }
 
     static T Deserialise(Context& context, const nlohmann::json& serialised)
@@ -157,12 +139,13 @@ class Serialiser<T> {
         return serialised.type() == nlohmann::json::value_t::string && std::regex_match(serialised.get<std::string>(), validator_);
     }
 
-    static nlohmann::json Serialise(Context& context, const T& value)
+    static void Serialise(DataWriter&& writer, const T& value)
     {
         std::stringstream valueStream;
         valueStream.precision(std::numeric_limits<T>::max_digits10);
         valueStream << value;
-        return valueStream.str();
+        writer.SetFormatToValue();
+        writer.Write(valueStream.str());
     }
 
     static T Deserialise(Context& context, const nlohmann::json& serialised)
@@ -194,12 +177,13 @@ class Serialiser<T> {
         return serialised.type() == nlohmann::json::value_t::string && std::regex_match(serialised.get<std::string>(), validator_);
     }
 
-    static nlohmann::json Serialise(Context& context, const T& value)
+    static void Serialise(DataWriter&& writer, const T& value)
     {
         std::stringstream valueStream;
         valueStream.precision(std::numeric_limits<T>::max_digits10);
         valueStream << value;
-        return valueStream.str();
+        writer.SetFormatToValue();
+        writer.Write(valueStream.str());
     }
 
     static T Deserialise(Context& context, const nlohmann::json& serialised)
@@ -231,12 +215,13 @@ public:
         return serialised.type() == nlohmann::json::value_t::string && std::regex_match(serialised.get<std::string>(), validator_);
     }
 
-    static nlohmann::json Serialise(Context& context, const T& value)
+    static void Serialise(DataWriter&& writer, const T& value)
     {
         std::stringstream valueStream;
         valueStream.precision(std::numeric_limits<T>::max_digits10);
         valueStream << value;
-        return valueStream.str();
+        writer.SetFormatToValue();
+        writer.Write(valueStream.str());
     }
 
     static T Deserialise(Context& context, const nlohmann::json& serialised)
@@ -263,9 +248,10 @@ public:
         return Serialiser<std::underlying_type_t<T>>::Validate(context, serialised);
     }
 
-    static nlohmann::json Serialise(Context& context, const T& value)
+    static void Serialise(DataWriter&& writer, const T& value)
     {
-        return std::bit_cast<std::underlying_type_t<T>>(value);
+        writer.SetFormatToValue();
+        writer.Write(std::bit_cast<std::underlying_type_t<T>>(value));
     }
 
     static T Deserialise(Context& context, const nlohmann::json& serialised)

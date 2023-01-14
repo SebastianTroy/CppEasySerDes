@@ -462,7 +462,7 @@ public:
      *
      * FIXME this breaks Validation if the user actually adds anything... defeats the point, so need to track user changes and facilitate them in Validate
      */
-    static void DefinePostSerialiseAction(std::function<void (const T&, nlohmann::json&)>&& action)
+    static void DefinePostSerialiseAction(std::function<void (const T&, DataWriter&)>&& action)
     {
         helper_.DefinePostSerialiseAction(std::move(action));
     }
@@ -499,9 +499,9 @@ public:
     /**
      * Intended to be called by esd::Serialise
      */
-    static nlohmann::json Serialise(Context& context, const T& value)
+    static void Serialise(DataWriter&& writer, const T& value)
     {
-        return helper_.Serialise(context, value);
+        return helper_.Serialise(writer, value);
     }
 
     /**
@@ -597,7 +597,7 @@ private:
      */
     struct Variable {
     public:
-        std::function<void (Context& context, const T& source, nlohmann::json& target)> writer_;
+        std::function<void (DataWriter& writer, const T& source)> writer_;
         std::function<bool (Context& context, const nlohmann::json& serialisedVariable)> validator_;
         std::function<void (Context& context, const nlohmann::json& source, T& target)> parser_;
     };
@@ -609,7 +609,7 @@ public:
         , initialisationCalls_{}
         , variables_{}
         , interdependantVariablesValidators_{}
-        , postSerialisationAction_([](Context&, const T&, nlohmann::json&) -> void { /* do nothing by default */})
+        , postSerialisationAction_([](DataWriter&, const T&) -> void { /* do nothing by default */})
         , postDeserialisationAction_([](Context&, const nlohmann::json&, T&) -> void { /* do nothing by default */})
     {
         // Removes the need for the user to call an empty SetConstruction()
@@ -644,14 +644,13 @@ public:
         return valid;
     }
 
-    [[nodiscard]] nlohmann::json Serialise(Context& context, const T& toSerialise)
+    void Serialise(DataWriter& writer, const T& toSerialise)
     {
-        nlohmann::json serialised = nlohmann::json::object();
+        writer.SetFormatToObject();
         for (const auto& [ key, memberHelper ] : variables_) {
-            memberHelper.writer_(context, toSerialise, serialised);
+            memberHelper.writer_(writer, toSerialise);
         }
-        std::invoke(postSerialisationAction_, context, toSerialise, serialised);
-        return serialised;
+        std::invoke(postSerialisationAction_, writer, toSerialise);
     }
 
     [[nodiscard]] T Deserialise(Context& context, const nlohmann::json& toDeserialise)
@@ -667,7 +666,7 @@ public:
         return deserialised;
     }
 
-    template <typename Factory, size_t... Indexes>
+    template <typename Factory, std::size_t... Indexes>
     requires std::is_invocable_v<Factory, ConstructionArgs...>
           && TypeIsDereferencableFrom<T, ReturnTypeNoCVRef<Factory, ConstructionArgs...>>
           && (sizeof...(ConstructionArgs) == sizeof...(Indexes))
@@ -849,7 +848,7 @@ private:
     std::vector<std::function<void (Context& context, const nlohmann::json& serialised, T& target)>> initialisationCalls_;
     std::map<std::string, Variable> variables_;
     std::vector<std::function<bool (Context& context, const nlohmann::json& serialised)>> interdependantVariablesValidators_;
-    std::function<void (Context& context, const T& t, nlohmann::json& serialised)> postSerialisationAction_;
+    std::function<void (DataWriter& context, const T& t)> postSerialisationAction_;
     std::function<void (Context& context, const nlohmann::json& serialised, T& t)> postDeserialisationAction_;
 
     // Not at all optimal but can never be a program bottleneck so might as well be clear
@@ -883,12 +882,12 @@ private:
         }
 
         variables_.insert(std::make_pair(label.value(), Variable{
-                                             { [=](Context& context, const T& source, nlohmann::json& target)
+                                             { [=](DataWriter& writer, const T& source)
                                                {
                                                    if constexpr (std::is_invocable_v<Invocable, const T&>) {
-                                                       target[label.value()] = Serialiser<ParameterType>::Serialise(context, std::invoke(valueGetter, source));
+                                                       writer.Insert(label.value(), std::invoke(valueGetter, source));
                                                    } else if constexpr (std::is_invocable_v<Invocable>) {
-                                                       target[label.value()] = Serialiser<ParameterType>::Serialise(context, std::invoke(valueGetter));
+                                                       writer.Insert(label.value(), std::invoke(valueGetter));
                                                    }
                                                } },
                                              { [=, customValidator = std::move(customValidator)](Context& context, const nlohmann::json& serialisedVariable) -> bool
@@ -919,12 +918,12 @@ private:
         }
 
         variables_.insert(std::make_pair(std::move(label.value()), Variable{
-                                             { [=](Context& context, const T& source, nlohmann::json& target)
+                                             { [=](DataWriter& writer, const T& source)
                                                {
                                                    if constexpr (std::is_invocable_v<InvocableGetter, const T&>) {
-                                                       target[label.value()] = Serialiser<ParameterType>::Serialise(context, std::invoke(valueGetter, source));
+                                                       writer.Insert(label.value(), std::invoke(valueGetter, source));
                                                    } else if constexpr (std::is_invocable_v<InvocableGetter>) {
-                                                       target[label.value()] = Serialiser<ParameterType>::Serialise(context, std::invoke(valueGetter));
+                                                       writer.Insert(label.value(), std::invoke(valueGetter));
                                                    }
                                                } },
                                              { [=, customValidator = std::move(customValidator)](Context& context, const nlohmann::json& serialisedVariable) -> bool
