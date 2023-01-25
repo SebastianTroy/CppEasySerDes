@@ -10,6 +10,7 @@
 
 namespace esd {
 
+// FIXME would rather include Core.h than redeclare this here, need to remove esd namespace level functions from core first
 template <typename T>
 class Serialiser;
 
@@ -103,6 +104,13 @@ public:
 
         --remainingWrites_;
     }
+
+    // TODO consider adding two "WriteList" overloads
+    // A "requires std::range/span" version that only accepts homogenous data, but can calculate the size
+    // A param pack version that accepts heterogenious data, and therefore knows the count at compile-time
+    // These can delegate to the SetCapacity() and PushBack() methods, which can be left available to the user
+    // This would free up the need for the user to specify the format from within Serialiser<T> (i.e. auto deduce the format and remove the ability to set it manually from the user)
+    // Forseeable issues: span/range does not guarantee there will be a size() function available? (percaps there is a std way to get the count in a span/range? see std::ranges::sized_range, a non-sized range could be iterated first to count, then iterated to write
 
     template <typename T>
     void PushBack(const T& value)

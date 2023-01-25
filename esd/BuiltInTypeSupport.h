@@ -44,9 +44,9 @@ public:
         writer.Write(value);
     }
 
-    static bool Deserialise(Context& context, const nlohmann::json& serialised)
+    static std::optional<bool> Deserialise(DataReader&& reader)
     {
-        return serialised.get<bool>();
+        return reader.Read<bool>();
     }
 };
 
@@ -69,9 +69,9 @@ class Serialiser<T> {
         writer.Write(value);
     }
 
-    static T Deserialise(Context& context, const nlohmann::json& serialised)
+    static std::optional<T> Deserialise(DataReader&& reader)
     {
-        return serialised.get<T>();
+        return reader.Read<T>();
     }
 };
 
@@ -94,9 +94,9 @@ class Serialiser<T> {
         writer.Write(value);
     }
 
-    static T Deserialise(Context& context, const nlohmann::json& serialised)
+    static std::optional<T> Deserialise(DataReader&& reader)
     {
-        return serialised.get<T>();
+        return reader.Read<T>();
     }
 };
 
@@ -119,9 +119,9 @@ public:
         writer.Write(value);
     }
 
-    static T Deserialise(Context& context, const nlohmann::json& serialised)
+    static std::optional<T> Deserialise(DataReader&& reader)
     {
-        return serialised.get<T>();
+        return reader.Read<T>();
     }
 };
 
@@ -148,13 +148,17 @@ class Serialiser<T> {
         writer.Write(valueStream.str());
     }
 
-    static T Deserialise(Context& context, const nlohmann::json& serialised)
+    static std::optional<T> Deserialise(DataReader&& reader)
     {
-        std::stringstream valueStream(serialised.get<std::string>());
-        valueStream.precision(std::numeric_limits<T>::max_digits10);
-        T value;
-        valueStream >> value;
-        return value;
+        std::optional<std::string> valueStr = reader.Read<std::string>();
+        if (valueStr.has_value()) {
+            std::stringstream valueStream(valueStr.value());
+            valueStream.precision(std::numeric_limits<T>::max_digits10);
+            T value;
+            valueStream >> value;
+            return value;
+        }
+        return std::nullopt;
     }
 
 private:
@@ -186,13 +190,17 @@ class Serialiser<T> {
         writer.Write(valueStream.str());
     }
 
-    static T Deserialise(Context& context, const nlohmann::json& serialised)
+    static std::optional<T> Deserialise(DataReader&& reader)
     {
-        std::stringstream valueStream(serialised.get<std::string>());
-        valueStream.precision(std::numeric_limits<T>::max_digits10);
-        T value;
-        valueStream >> value;
-        return value;
+        std::optional<std::string> valueStr = reader.Read<std::string>();
+        if (valueStr.has_value()) {
+            std::stringstream valueStream(valueStr.value());
+            valueStream.precision(std::numeric_limits<T>::max_digits10);
+            T value;
+            valueStream >> value;
+            return value;
+        }
+        return std::nullopt;
     }
 
 private:
@@ -224,13 +232,17 @@ public:
         writer.Write(valueStream.str());
     }
 
-    static T Deserialise(Context& context, const nlohmann::json& serialised)
+    static std::optional<T> Deserialise(DataReader&& reader)
     {
-        std::stringstream valueStream(serialised.get<std::string>());
-        valueStream.precision(std::numeric_limits<T>::max_digits10);
-        T value;
-        valueStream >> value;
-        return value;
+        std::optional<std::string> valueStr = reader.Read<std::string>();
+        if (valueStr.has_value()) {
+            std::stringstream valueStream(valueStr.value());
+            valueStream.precision(std::numeric_limits<T>::max_digits10);
+            T value;
+            valueStream >> value;
+            return value;
+        }
+        return std::nullopt;
     }
 
 private:
@@ -254,9 +266,13 @@ public:
         writer.Write(std::bit_cast<std::underlying_type_t<T>>(value));
     }
 
-    static T Deserialise(Context& context, const nlohmann::json& serialised)
+    static std::optional<T> Deserialise(DataReader&& reader)
     {
-        return std::bit_cast<T>(serialised.get<std::underlying_type_t<T>>());
+        std::optional<std::underlying_type_t<T>> underlying = reader.Read<std::underlying_type_t<T>>();
+        if (underlying.has_value()) {
+            return std::bit_cast<T>(underlying.value());
+        }
+        return std::nullopt;
     }
 };
 

@@ -3,6 +3,7 @@
 
 #include "Context.h"
 #include "DataWriter.h"
+#include "DataReader.h"
 
 #include <nlohmann/json.hpp>
 
@@ -50,10 +51,10 @@ class Serialiser;
  * an unsupported type is used with it.
  */
 template <typename T>
-concept TypeSupportedByEasySerDes = std::same_as<T, std::remove_cvref_t<T>> && requires (Context& context, const T& t, DataWriter&& writer, const nlohmann::json& dataSource) {
+concept TypeSupportedByEasySerDes = std::same_as<T, std::remove_cvref_t<T>> && requires (Context& context, const T& t, DataReader&& reader, DataWriter&& writer, const nlohmann::json& dataSource) {
     { Serialiser<T>::Validate(context, dataSource) } -> std::same_as<bool>;
     { Serialiser<T>::Serialise(std::move(writer), t) } -> std::same_as<void>;
-    { Serialiser<T>::Deserialise(context, dataSource) } -> std::same_as<T>;
+    { Serialiser<T>::Deserialise(std::move(reader)) } -> std::same_as<std::optional<T>>;
 };
 
 // Final target

@@ -18,38 +18,6 @@
 
 namespace esd {
 
-// Specialise for std::byte so that is is more user readable in JSON form
-template <>
-class Serialiser<std::byte> {
-public:
-    static bool Validate(Context& context, const nlohmann::json& serialised)
-    {
-        return serialised.is_string() && serialised.get<std::string>().size() == 2;
-    }
-
-    static void Serialise(DataWriter&& writer, const std::byte& value)
-    {
-        // TODO when std::format available, this will be a lot cleaner
-        std::ostringstream byteStringStream;
-        // Stream uint32 because it won't be converted to a char
-        uint32_t valueAsWord = std::bit_cast<uint8_t>(value);
-        byteStringStream << std::hex << std::setfill('0') << std::fixed << std::setw(2) << valueAsWord;
-
-        writer.SetFormatToValue();
-        writer.Write(byteStringStream.str());
-    }
-
-    static std::byte Deserialise(Context& context, const nlohmann::json& serialised)
-    {
-        // TODO when std::format available, this will be a lot cleaner
-        uint32_t deserialised;
-        std::istringstream byteStringStream(serialised.get<std::string>());
-        byteStringStream >> std::hex >> deserialised;
-        uint8_t deserialisedAsByte = deserialised & 0xFF;
-        return std::bit_cast<std::byte>(deserialisedAsByte);
-    }
-};
-
 template <typename T1, typename T2>
 class Serialiser<std::pair<T1, T2>> : public ClassHelper<std::pair<T1, T2>, T1, T2> {
 public:
@@ -95,9 +63,9 @@ public:
         writer.Write(string);
     }
 
-    static std::string Deserialise(Context& context, const nlohmann::json& serialised)
+    static std::optional<std::string> Deserialise(DataReader&& reader)
     {
-        return serialised.get<std::string>();
+        return reader.Read<std::string>();
     }
 };
 
@@ -127,10 +95,18 @@ public:
         writer.Write(serialised);
     }
 
-    static T Deserialise(Context& context, const nlohmann::json& serialised)
+    static std::optional<T> Deserialise(DataReader&& reader)
     {
+        std::optional<std::string> dataAsString = reader.Read<std::string>();
+        if (!dataAsString) {
+            return std::nullopt;
+        }
+
         T items;
-        std::ranges::copy(serialised.get<std::string>(), std::back_inserter(items));
+        if constexpr (requires (T t, std::size_t c){ { t.reserve(c) } -> std::same_as<void>; }) {
+            items.reserve(dataAsString->size());
+        }
+        std::ranges::copy(*dataAsString, std::back_inserter(items));
         return items;
     }
 };
@@ -145,15 +121,14 @@ public:
 
     static void Serialise(DataWriter&& writer, const T& range)
     {
+        // TODO add writer.WriteRange() to make Serialise and Deserialise symmetric
         writer.SetFormatToArray(range.size());
         std::ranges::for_each(range, [&](const auto& value){ writer.PushBack(value); });
     }
 
-    static T Deserialise(Context& context, const nlohmann::json& serialised)
+    static std::optional<T> Deserialise(DataReader&& reader)
     {
-        T items;
-        std::ranges::transform(serialised, std::inserter(items, items.end()), [&](const nlohmann::json& value){ return Serialiser<typename T::value_type>::Deserialise(context, value); });
-        return items;
+        return reader.ReadRange<T>();
     }
 };
 
@@ -181,9 +156,19 @@ public:
         writer.Write(range.to_string());
     }
 
-    static std::bitset<N> Deserialise(Context& context, const nlohmann::json& serialised)
+    static std::optional<std::bitset<N>> Deserialise(DataReader&& reader)
     {
-        return std::bitset<N>(serialised.get<std::string>());
+        auto bitsString = reader.Read<std::string>();
+        if (!bitsString) {
+            return std::nullopt;
+        }
+
+        if (bitsString->size() != N) {
+            reader.LogError("Expected exactly " + std::to_string(N) + " bits of data, but got " + *bitsString + " (" + std::to_string(bitsString->size()) + " bits).");
+            return std::nullopt;
+        }
+
+        return std::make_optional<std::bitset<N>>(bitsString.value());
     }
 };
 
@@ -201,16 +186,28 @@ public:
         std::ranges::for_each(range, [&](const auto& value){ writer.PushBack(value); });
     }
 
-    static std::array<T, N> Deserialise(Context& context, const nlohmann::json& serialised)
+    static std::optional<std::array<T, N>> Deserialise(DataReader&& reader)
     {
-        return CreateArray(context, serialised, std::make_index_sequence<N>());
-    }
+        auto count = reader.Size();
+        if (!count) {
+            return std::nullopt;
+        }
 
-private:
-    template <std::size_t... I>
-    static std::array<T, N> CreateArray(Context& context, const nlohmann::json& serialised, std::index_sequence<I...>)
-    {
-        return std::array<T, N>{ Serialiser<T>::Deserialise(context, serialised.at(I)) ... };
+        if (*count != N) {
+            reader.LogError("Expected exactly " + std::to_string(N) + " items, but found " + std::to_string(*count) + ".");
+            return std::nullopt;
+        }
+
+        std::array<T, N> deserialisedArray;
+        for (std::size_t i; i < *count; ++i) {
+            auto item = reader.PopBack<T>();
+            if (item) {
+                deserialisedArray[i] = *item;
+            } else {
+                return std::nullopt;
+            }
+        }
+        return deserialisedArray;
     }
 };
 
@@ -224,28 +221,38 @@ public:
 
     static void Serialise(DataWriter&& writer, const std::optional<T>& toSerialise)
     {
-        writer.SetFormatToValue();
+        bool hasValue = toSerialise.has_value();
 
-        if (toSerialise.has_value()) {
+        writer.SetFormatToArray(hasValue ? 1 : 0);
+
+        if (hasValue) {
             writer.Write(toSerialise.value());
-        } else {
-            writer.Write(nullString);
         }
     }
 
-    static std::optional<T> Deserialise(Context& context, const nlohmann::json& serialised)
+    static std::optional<std::optional<T>> Deserialise(DataReader&& reader)
     {
-        std::optional<T> ret = std::nullopt;
+        auto count = reader.Size();
 
-        if (serialised != nullString) {
-            if constexpr (HasClassHelperSpecialisation<T>) {
-                ret = Serialiser<T>::DeserialiseInPlace(context, [](auto... args){ return std::optional<T>::emplace(args...); }, serialised);
-            } else if constexpr (std::is_move_constructible_v<T> || std::is_copy_constructible_v<T>) {
-                ret = std::optional<T>(Serialiser<T>::Deserialise(context, serialised));
-            }
+        if (!count) {
+            return std::nullopt;
         }
 
-        return ret;
+        switch (*count) {
+        case 0:
+            return std::make_optional(std::optional<T>{});
+        case 1: {
+            auto value = reader.PopBack<T>();
+            if (!value) {
+                return std::nullopt;
+            }
+            return value;
+            }
+            break;
+        default:
+            reader.LogError("Expected exactly 0 or 1 stored items, found " + std::to_string(*count) + ".");
+            return std::nullopt;
+        }
     }
 
 private:
@@ -263,7 +270,7 @@ public:
         valid = (... && [&]() -> bool
         {
             std::string key = detail::TypeNameStr<Ts>();
-            return serialised.contains(key) && ((serialised[key] == nullString) || Serialiser<Ts>::Validate(context, serialised[key]));
+            return serialised.contains(key) && Serialiser<std::optional<Ts>>::Validate(context, serialised[key]);
         }());
 
         return valid;
@@ -276,33 +283,62 @@ public:
         // The following immediately called lambda is called once for each type
         ([&]()
         {
-            std::string key = detail::TypeNameStr<Ts>();
             if (std::holds_alternative<Ts>(toSerialise)) {
-                writer.Insert(key, std::get<Ts>(toSerialise));
+                writer.Insert(Key<Ts>(), std::make_optional<Ts>(std::get<Ts>(toSerialise)));
             } else {
-                writer.Insert(key, nullString);
+                writer.Insert(Key<Ts>(), std::make_optional<Ts>(std::nullopt));
             }
         }(), ...);
     }
 
-    static std::variant<Ts...> Deserialise(Context& context, const nlohmann::json& serialised)
+    static std::optional<std::variant<Ts...>> Deserialise(DataReader&& reader)
     {
-        std::variant<Ts...> ret;
-
-        // The following immediately called lambda is called once for each type
-        ([&]()
-        {
-            std::string key = detail::TypeNameStr<Ts>();
-            if (serialised[key] != nullString) {
-                ret = Serialiser<Ts>::Deserialise(context, serialised[key]);
-            }
-        }(), ...);
-
-        return ret;
+        return Deserialise(reader, std::make_index_sequence<std::variant_size_v<std::variant<Ts...>>>{});
     }
 
 private:
-    static inline const std::string nullString = "nullVariant";
+    template <typename T>
+    static std::string Key()
+    {
+        return detail::TypeNameStr<T>();
+    }
+
+    template <std::size_t... Indices>
+    static std::optional<std::variant<Ts...>> Deserialise(DataReader& reader, std::index_sequence<Indices...>)
+    {
+        std::variant<Ts...> ret;
+        bool encounteredError = false;
+        bool foundValue = false;
+        ([&]()
+        {
+            if (encounteredError) {
+                return;
+            }
+
+            auto storedOptional = reader.Extract<std::optional<Ts>>(Key<Ts>());
+            if (!storedOptional) {
+                reader.LogError("Expected an optional value to be stored for each type in the variant.");
+                encounteredError = true;
+            } else {
+                std::optional<Ts> optionalValue = storedOptional.value();
+                if (optionalValue) {
+                    ret.emplace(*optionalValue);
+                    foundValue = true;
+                }
+            }
+        }(), ...);
+
+        if (!foundValue) {
+            reader.LogError("Expected an optional value to be stored for each type in the variant.");
+            return std::nullopt;
+        }
+
+        if (encounteredError) {
+            return std::nullopt;
+        }
+
+        return ret;
+    }
 };
 
 template <typename T>
@@ -338,7 +374,7 @@ public:
         }
     }
 
-    static std::unique_ptr<T> Deserialise(Context& context, const nlohmann::json& serialised)
+    static std::optional<std::unique_ptr<T>> Deserialise(DataReader&& reader)
     {
         if (serialised == nullPointerString) {
             return nullptr;
@@ -364,9 +400,6 @@ public:
             return std::make_unique<T>(Serialiser<T>::Deserialise(context, serialised));
         }
     }
-
-private:
-    static inline const std::string nullPointerString = "nullptr";
 };
 
 /**

@@ -20,6 +20,7 @@ add_library(CppEasySerDes INTERFACE
     EasySerDes.h
     esd/Core.h
     esd/Context.h
+    esd/DataReader.h
     esd/DataWriter.h
     esd/BuiltInTypeSupport.h
     esd/StdLibSupport.h
