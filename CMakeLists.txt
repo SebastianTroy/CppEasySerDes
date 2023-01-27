@@ -27,7 +27,7 @@ add_library(CppEasySerDes INTERFACE
     esd/PolymorphismHelper.h
 )
 
-add_custom_target(Other
+add_custom_target(ESD_Other
     SOURCES
     README.md
 )

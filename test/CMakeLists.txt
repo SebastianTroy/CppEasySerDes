@@ -25,7 +25,6 @@ target_sources(Tests
 target_include_directories(Tests
     PUBLIC
     ${PROJECT_SOURCE_DIR}
-    ${PROJECT_SOURCE_DIR}/Utility
 )
 
 target_link_libraries(Tests
