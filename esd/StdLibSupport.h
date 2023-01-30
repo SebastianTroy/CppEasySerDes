@@ -352,7 +352,7 @@ public:
         }
 
         if constexpr (HasClassHelperSpecialisation<T>) {
-            return Serialiser<T>::DeserialiseInPlace(context, [](auto... args){ return std::make_unique<T>(args...); }, serialised);
+            return Serialiser<T>::DeserialiseInPlace(context, [](auto... args){ return std::make_unique<T>(std::move(args)...); }, serialised);
         } else if constexpr (TypeSupportedByEasySerDes<T>) {
             return std::make_unique<T>(Serialiser<T>::Deserialise(context, serialised));
         }
