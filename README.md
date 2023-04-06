@@ -975,28 +975,29 @@ Because the `Serialiser<unique_ptr<T>>` calls `PolymorphismHelper<T>::Deserialis
 ## TODO
 -------
 
- [x] Support std library types
- [x] Add tests
- [x] Create `ClassHelper` type to simplify support of user types
- [x] Support Polymorphism
- [ ] Inline Documentation of why I've created various types and functions, with intended purpose
- [x] Refactor project structure, `esd` directory for includes, remove the `EasySerDes` filename prefix
- [x] Refactor to remove Json prefixes from type and header names
- [x] Create a Context type and use it to store all caches
- [x] Extend Context to include error reporting
- [x] Add tests for polymorphism with a pure virtual base class
- [ ] Push to Github
- [ ] Add some github extensions (test coverage, auto-running tests, linter e.t.c.)
- [ ] Zero warnings
- [ ] 100% test coverage
- [ ] Add to website and link to website in README
- [ ] In the "Adding It To Your Own Project" section, link to one of my projects that uses this library as a complete example
- [ ] MAYBE POD helper (that would implement the `Configure` function automatically)
- [ ] MAYBE Enum helper that allows the user to set a max and min value, or set allowed values, or set valid flags etc (and would implement the `Configure` function automatically)
- [ ] MAYBE Flags helper, like enum helper but also allows values which are enum values or'd together (and would implement the `Configure` function automatically)
- [ ] MAYBE use DataOut & DataIn to abstract the underlying storage type
- [ ] MAYBE if underlying storage type is abstracted, create "json" directory and make CMAKE variable to exclude it unless  nlohman::json is detected
- [ ] MAYBE if underlying storage type is abstracted, create a std::stream based version that isn't dependant on 3rd parties
- [ ] MAYBE if underlying storage type is abstracted, create a debugging version with switches and hooks to make debugging easier (perhaps the std one above will be usefull enough for this?)
+- [x] Support std library types
+- [x] Add tests
+- [x] Create `ClassHelper` type to simplify support of user types
+- [x] Support Polymorphism
+- [ ] Inline Documentation of why I've created various types and functions, with intended purpose
+- [x] Refactor project structure, `esd` directory for includes, remove the `EasySerDes` filename prefix
+- [x] Refactor to remove Json prefixes from type and header names
+- [x] Create a Context type and use it to store all caches
+- [x] Extend Context to include error reporting
+- [x] Add tests for polymorphism with a pure virtual base class
+- [ ] Push to Github
+- [ ] Add some github extensions (test coverage, auto-running tests, linter e.t.c.)
+- [ ] Zero warnings
+- [ ] 100% test coverage
+- [ ] Add to website and link to website in README
+- [ ] In the "Adding It To Your Own Project" section, link to one of my projects that uses this library as a complete example
+- [ ] MAYBE POD helper (that would implement the `Configure` function automatically)
+- [ ] MAYBE Enum helper that allows the user to set a max and min value, or set allowed values, or set valid flags etc (and would implement the `Configure` function automatically)
+- [ ] MAYBE Flags helper, like enum helper but also allows values which are enum values or'd together (and would implement the `Configure` function automatically)
+- [ ] MAYBE use DataOut & DataIn to abstract the underlying storage type
+- [ ] MAYBE if underlying storage type is abstracted, create "json" directory and make CMAKE variable to exclude it unless  nlohman::json is detected
+- [ ] MAYBE if underlying storage type is abstracted, create a std::stream based version that isn't dependant on 3rd parties
+- [ ] MAYBE if underlying storage type is abstracted, create a debugging version with switches and hooks to make debugging easier (perhaps the std one above will be usefull enough for this?)
 
-[Back to Index](#Table-of-Contents)
+[Back to Index](#Table-of-Contents)
+
